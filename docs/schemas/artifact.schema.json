@@ -1,0 +1,258 @@
+{
+  "$defs": {
+    "ActionType": {
+      "description": "Action performed in a single ordered step of the flow.",
+      "enum": [
+        "navigate",
+        "click",
+        "type",
+        "extract",
+        "select"
+      ],
+      "title": "ActionType",
+      "type": "string"
+    },
+    "Checkpoint": {
+      "additionalProperties": false,
+      "description": "Success condition verified before declaring the replay successful.",
+      "properties": {
+        "description": {
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "expected_condition": {
+          "$ref": "#/$defs/ExpectedCondition"
+        },
+        "locators": {
+          "items": {
+            "$ref": "#/$defs/Locator"
+          },
+          "minItems": 1,
+          "title": "Locators",
+          "type": "array"
+        }
+      },
+      "required": [
+        "description",
+        "locators",
+        "expected_condition"
+      ],
+      "title": "Checkpoint",
+      "type": "object"
+    },
+    "ExpectedCondition": {
+      "description": "Success condition verified on the checkpoint before declaring success.",
+      "enum": [
+        "visible",
+        "text_present",
+        "url_contains"
+      ],
+      "title": "ExpectedCondition",
+      "type": "string"
+    },
+    "JSONSchemaObject": {
+      "additionalProperties": false,
+      "description": "JSON-Schema-like description of typed inputs or outputs.\n\nOnly the structural subset the system relies on is allowed: an object\nwith per-field ``type`` entries and a ``required`` subset of them.",
+      "properties": {
+        "properties": {
+          "additionalProperties": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "minProperties": 1,
+          "title": "Properties",
+          "type": "object"
+        },
+        "required": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Required",
+          "type": "array"
+        },
+        "type": {
+          "pattern": "^object$",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "properties"
+      ],
+      "title": "JSONSchemaObject",
+      "type": "object"
+    },
+    "Locator": {
+      "additionalProperties": false,
+      "description": "A single element locator. The order of locators in a list is the\nfallback priority: the replay engine tries them from first to last.",
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/LocatorType"
+        },
+        "value": {
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "value"
+      ],
+      "title": "Locator",
+      "type": "object"
+    },
+    "LocatorType": {
+      "description": "How a target element/control is identified, in priority order.",
+      "enum": [
+        "id",
+        "css",
+        "xpath",
+        "role",
+        "text"
+      ],
+      "title": "LocatorType",
+      "type": "string"
+    },
+    "Step": {
+      "additionalProperties": false,
+      "description": "One ordered action of the flow.\n\nConditional rules by ``action_type``:\n- ``navigate``: ``value`` is the destination URL.\n- ``type`` / ``select``: ``value`` must embed at least one\n  ``{{input.*}}`` reference so run values are never hardcoded.\n- ``click``: no ``value``.\n- ``extract``: requires ``output_key`` (membership in the artifact\n  output schema is enforced by :class:`Artifact`), no ``value``.",
+      "properties": {
+        "action_type": {
+          "$ref": "#/$defs/ActionType"
+        },
+        "description": {
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "locators": {
+          "items": {
+            "$ref": "#/$defs/Locator"
+          },
+          "minItems": 1,
+          "title": "Locators",
+          "type": "array"
+        },
+        "output_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Key"
+        },
+        "step_id": {
+          "minimum": 1,
+          "title": "Step Id",
+          "type": "integer"
+        },
+        "timeout_ms": {
+          "default": 5000,
+          "exclusiveMinimum": 0,
+          "title": "Timeout Ms",
+          "type": "integer"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "step_id",
+        "action_type",
+        "description",
+        "locators"
+      ],
+      "title": "Step",
+      "type": "object"
+    },
+    "TargetApp": {
+      "additionalProperties": false,
+      "description": "Metadata identifying the application surface this capability runs on.",
+      "properties": {
+        "entry_url": {
+          "pattern": "^https?://",
+          "title": "Entry Url",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "entry_url"
+      ],
+      "title": "TargetApp",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A typed, versioned, serializable capability (Assignment section 3.2).\n\nReviewers and calling agents must understand what the capability does,\nwhat it needs and what it returns from this contract alone.",
+  "properties": {
+    "capability_id": {
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "title": "Capability Id",
+      "type": "string"
+    },
+    "checkpoint": {
+      "$ref": "#/$defs/Checkpoint"
+    },
+    "description": {
+      "minLength": 1,
+      "title": "Description",
+      "type": "string"
+    },
+    "input_schema": {
+      "$ref": "#/$defs/JSONSchemaObject"
+    },
+    "output_schema": {
+      "$ref": "#/$defs/JSONSchemaObject"
+    },
+    "steps": {
+      "items": {
+        "$ref": "#/$defs/Step"
+      },
+      "minItems": 1,
+      "title": "Steps",
+      "type": "array"
+    },
+    "target_app": {
+      "$ref": "#/$defs/TargetApp"
+    },
+    "version": {
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "capability_id",
+    "version",
+    "description",
+    "target_app",
+    "input_schema",
+    "output_schema",
+    "steps",
+    "checkpoint"
+  ],
+  "title": "Artifact",
+  "type": "object"
+}

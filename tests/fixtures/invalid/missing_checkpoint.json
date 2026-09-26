@@ -1,0 +1,51 @@
+{
+  "capability_id": "lookup_member_balance",
+  "version": "1.0.0",
+  "description": "Searches for a member by ID in the legacy banking console and extracts their savings balance.",
+  "target_app": {
+    "name": "MemberServ",
+    "entry_url": "http://127.0.0.1:5000/"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "member_id": {
+        "type": "string",
+        "description": "Member identifier, e.g. M-1001"
+      }
+    },
+    "required": ["member_id"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "savings_balance": {
+        "type": "string",
+        "description": "Savings account balance as displayed on screen"
+      }
+    },
+    "required": ["savings_balance"]
+  },
+  "steps": [
+    {
+      "step_id": 1,
+      "action_type": "type",
+      "description": "Enter the member ID into the search box",
+      "locators": [
+        {"type": "id", "value": "q"}
+      ],
+      "value": "{{input.member_id}}",
+      "timeout_ms": 5000
+    },
+    {
+      "step_id": 2,
+      "action_type": "extract",
+      "description": "Extract the savings balance from the accounts table",
+      "locators": [
+        {"type": "css", "value": "#accountsTable td.savings"}
+      ],
+      "output_key": "savings_balance",
+      "timeout_ms": 5000
+    }
+  ]
+}

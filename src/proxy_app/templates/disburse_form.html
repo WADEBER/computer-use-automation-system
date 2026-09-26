@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Loan Disbursement - MemberServ{% endblock %}
+{% block content %}
+<h1>Loan Disbursement</h1>
+<p class="muted">Member: <b>{{ member.full_name }}</b> ({{ member.member_id }}) &mdash; Credit limit: {{ "%.2f"|format(member.credit_limit) }}</p>
+
+{% if errors %}
+<div class="errorlist">
+  <b>The form contains errors:</b>
+  <ul>
+    {% for e in errors %}<li>{{ e }}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<form action="/members/{{ member.member_id }}/loans/disburse" method="post">
+  <table>
+    <tr>
+      <th><label for="account_id">Disbursement account</label></th>
+      <td>
+        <select id="account_id" name="account_id">
+          <option value="">-- select --</option>
+          {% for acc in member.accounts %}
+          <option value="{{ acc.account_id }}" {% if acc.account_id == account_id %}selected{% endif %}>
+            {{ acc.account_id }} ({{ acc.type }}) - {{ "%.2f"|format(acc.balance) }}
+          </option>
+          {% endfor %}
+        </select>
+      </td>
+    </tr>
+    <tr>
+      <th><label for="amount">Amount</label></th>
+      <td><input type="text" id="amount" name="amount" size="16" value="{{ amount_raw }}"></td>
+    </tr>
+  </table>
+  <p><input type="submit" class="btn" value="Review Disbursement"></p>
+</form>
+
+<p><a href="/members/{{ member.member_id }}">&laquo; Back to member detail</a></p>
+{% endblock %}

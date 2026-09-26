@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Search Results - MemberServ{% endblock %}
+{% block content %}
+<h1>Search Results</h1>
+<p class="muted">Query: "{{ query }}"</p>
+
+{% if results %}
+<table id="searchResults">
+  <tr>
+    <th>Member ID</th>
+    <th>Full Name</th>
+    <th>&nbsp;</th>
+  </tr>
+  {% for m in results %}
+  <tr>
+    <td>{{ m.member_id }}</td>
+    <td>{{ m.full_name }}</td>
+    <td><a href="/members/{{ m.member_id }}">View Detail</a></td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="notfound">No records found. Member not found for "{{ query }}".</p>
+{% endif %}
+
+<p><a href="/">&laquo; Back to search</a></p>
+{% endblock %}

@@ -56,11 +56,11 @@ docs/plans/
 
 | Fase | Nombre | Spec | Estado |
 |------|--------|------|--------|
-| 1 | Project Scaffold & Tooling | Pendiente | Pendiente |
-| 2 | Proxy Target App | Pendiente | Pendiente |
-| 3 | Artifact Schema | Pendiente | Pendiente |
-| 4 | Safety & Policy Core | Pendiente | Pendiente |
-| 5 | Discovery Loop (LLM) | Pendiente | Pendiente |
+| 1 | Project Scaffold & Tooling | `fase_1/1.spec.md` | Completada |
+| 2 | Proxy Target App | `fase_2/2.spec.md` | Completada |
+| 3 | Artifact Schema | `fase_3/3.spec.md` | Completada |
+| 4 | Safety & Policy Core | `fase_4/4.spec.md` | Completada |
+| 5 | Discovery Loop (LLM) | `fase_5/5.spec.md` | En curso |
 | 6 | Deterministic Replay Engine | Pendiente | Pendiente |
 | 7 | Error Taxonomy | Pendiente | Pendiente |
 | 8 | Human-in-the-Loop Handoff | Pendiente | Pendiente |
@@ -69,69 +69,77 @@ docs/plans/
 ---
 
 ## Fase 1: Project Scaffold & Tooling
-- [ ] Estructura `src/`, `tests/`, `evidence/`, `docs/` en inglés
-- [ ] `pyproject.toml` con deps: selenium, cliente Ollama, pydantic, pytest, ruff (+ mypy opcional)
-- [ ] `.env.example` (p.ej. `OLLAMA_BASE_URL`, `OLLAMA_MODEL=qwen2.5-coder:7b`) sin secretos reales
-- [ ] `.gitignore` hereda Python + `.env` + `.venv` + evidence volátil si aplica
-- [ ] Comandos dev: `pytest`, `ruff check`, runner mínimo de CLI placeholder
-- [ ] CI mínimo (`.github/workflows`) con lint + test en verde sobre vacío
-- [ ] README base en inglés (setup de ejemplo; demo path se completa en Fase 9)
+- [x] Estructura `src/`, `tests/`, `evidence/`, `docs/` en inglés
+- [x] `pyproject.toml` con deps: selenium, cliente Ollama, pydantic, pytest, ruff (+ mypy opcional)
+- [x] `.env.example` (p.ej. `OLLAMA_BASE_URL`, `OLLAMA_MODEL=qwen2.5-coder:7b`) sin secretos reales
+- [x] `.gitignore` hereda Python + `.env` + `.venv` + evidence volátil si aplica
+- [x] Comandos dev: `pytest`, `ruff check`, runner mínimo de CLI placeholder
+- [x] CI mínimo (`.github/workflows`) con lint + test en verde sobre vacío
+- [x] README base en inglés (setup de ejemplo; demo path se completa en Fase 9)
 
 **Cierre:** `pytest` y `ruff` pasan; repo sin credenciales; todo texto de proyecto en inglés.
+**Cerrada:** 2026-09-25 — ruff/format/pytest (4 tests)/bandit/pip-audit en verde; sin secretos; spec + plan en `fase_1/`.
 
 ---
 
 ## Fase 2: Proxy Target App
-- [ ] App web local en `src/proxy_app/` (mismo repo)
-- [ ] Flujo bancario multi-step no trivial: search → detail → action con confirmación
-- [ ] Escenarios de excepción: "member not found" (business outcome), modal/confirmación, estado de validación
-- [ ] Superficie intencionadamente realista (marcado heredado aceptable; sin depender de test IDs perfectos)
-- [ ] Datos de prueba seed (member IDs, saldos) deterministas
-- [ ] Cómo levantarla documentado (`make run-app` o comando equivalente)
-- [ ] Test de humo del flujo core
+- [x] App web local en `src/proxy_app/` (mismo repo)
+- [x] Flujo bancario multi-step no trivial: search → detail → action con confirmación
+- [x] Escenarios de excepción: "member not found" (business outcome), modal/confirmación, estado de validación
+- [x] Superficie intencionadamente realista (marcado heredado aceptable; sin depender de test IDs perfectos)
+- [x] Datos de prueba seed (member IDs, saldos) deterministas
+- [x] Cómo levantarla documentado (`make run-app` o comando equivalente)
+- [x] Test de humo del flujo core
 
 **Cierre:** flujo completo funciona a mano en local; tests de humo pasan; forma parte de este repo.
+**Cerrada:** 2026-09-25 — 25 tests verdes; ruff/format/mypy/bandit OK; walkthrough HTTP manual OK; spec + plan en `fase_2/`.
 
 ---
 
 ## Fase 3: Artifact Schema
-- [ ] Esquema JSON + modelos Pydantic tipados (serializable, versionado)
-- [ ] Campos mínimos Assignment §3.2: steps ordenados, estrategia de localización por step, `input_schema`, `output_schema`, `checkpoint`
-- [ ] Parametrización `{{input.*}}` (sin valores de corrida hardcodeados)
-- [ ] Array prioritario de fallback locators (id → css → xpath semántico / role / text)
-- [ ] Metadatos: `capability_id`, `version`, `description`, `target_app`
-- [ ] Validación estricta + fixture de ejemplo válida e inválida
-- [ ] Tests de round-trip (load/save/validate)
+- [x] Esquema JSON + modelos Pydantic tipados (serializable, versionado)
+- [x] Campos mínimos Assignment §3.2: steps ordenados, estrategia de localización por step, `input_schema`, `output_schema`, `checkpoint`
+- [x] Parametrización `{{input.*}}` (sin valores de corrida hardcodeados)
+- [x] Array prioritario de fallback locators (id → css → xpath semántico / role / text)
+- [x] Metadatos: `capability_id`, `version`, `description`, `target_app`
+- [x] Validación estricta + fixture de ejemplo válida e inválida
+- [x] Tests de round-trip (load/save/validate)
 
 **Cierre:** fixture válida pasa validación; inválida falla con error claro; schema documentado en inglés.
+
+**Cerrada:** 2026-09-25 — 18/18 CA verificados; 68 tests verdes; ruff/format/mypy/bandit OK; spec + plan en `fase_3/`.
 
 ---
 
 ## Fase 4: Safety & Policy Core
-- [ ] Allowlist configurable: dominios/rutas permitidos y tipos de acción permitidos
-- [ ] El agente/replay **no** actúa fuera de la allowlist (tests negativos)
-- [ ] Clasificación de acciones: safe/reversible vs risky/irreversible (política: bloquear / confirmar / flag — justificada)
-- [ ] Redacción de secretos y PII financiera en logs y artefactos (capa de escritura, no solo “acordarse”)
-- [ ] Tests de allowlist + redacción
-- [ ] `/8-auditar` de la fase
+- [x] Allowlist configurable: dominios/rutas permitidos y tipos de acción permitidos
+- [x] El agente/replay **no** actúa fuera de la allowlist (tests negativos)
+- [x] Clasificación de acciones: safe/reversible vs risky/irreversible (política: bloquear / confirmar / flag — justificada)
+- [x] Redacción de secretos y PII financiera en logs y artefactos (capa de escritura, no solo “acordarse”)
+- [x] Tests de allowlist + redacción
+- [x] `/8-auditar` de la fase
 
 **Cierre:** tests de guardrails en verde; sin secretos ni PII crudos en outputs de test; auditoría sin Critical/High abiertos.
+
+**Cerrada:** 2026-09-25 — 23/23 CA verificados; 139 tests verdes; ruff/format/mypy/bandit OK; auditoría `docs/security/audit-2026-09-25-fase-4.md` (1 High + 2 Low corregidos con tests de regresión, sin Critical/High abiertos); spec + plan en `fase_4/`.
 
 ---
 
 ## Fase 5: Discovery Loop (LLM)
-- [ ] Bucle `observe → decide → act` con meta en lenguaje natural + target (URL/entry)
-- [ ] Observe: snapshot limpio de DOM o accessibility tree (sin scripts/ruido; **no** screenshots crudos — el modelo es de texto)
-- [ ] Decide: prompts estructurados con Ollama `qwen2.5-coder:7b`; salida tipada de acción
-- [ ] Act: clic, type, navigate sobre la UI real (Selenium)
-- [ ] Stopping conditions: goal alcanzado, max steps, timeout, dead-end
-- [ ] Contadores y detección de estados repetidos (anti-bucle infinito)
-- [ ] Structured logs de cada step (qué, por qué, resultado)
+- [x] Bucle `observe → decide → act` con meta en lenguaje natural + target (URL/entry)
+- [x] Observe: snapshot limpio de DOM o accessibility tree (sin scripts/ruido; **no** screenshots crudos — el modelo es de texto)
+- [x] Decide: prompts estructurados con Ollama `qwen2.5-coder:7b`; salida tipada de acción
+- [x] Act: clic, type, navigate sobre la UI real (Selenium)
+- [x] Stopping conditions: goal alcanzado, max steps, timeout, dead-end
+- [x] Contadores y detección de estados repetidos (anti-bucle infinito)
+- [x] Structured logs de cada step (qué, por qué, resultado)
 - [ ] **Corrida real** contra `proxy_app`: genera artefacto vía Fase 3
 - [ ] Evidencia inicial en `evidence/` (log + artefacto)
-- [ ] `/8-auditar` de la fase
+- [x] `/8-auditar` de la fase
 
 **Cierre:** al menos una corrida LLM real completa sobre superficie viva; artefacto emitido; log en `evidence/`.
+
+**Estado:** 2026-09-25 — 8/10 CA verificados (30/31 en `fase_5/5.spec.md`); 261 tests verdes; ruff/format/mypy/bandit OK; auditoría `docs/security/audit-2026-09-25-fase-5.md` (0 Critical/High; SEC-501/502 corregidos con tests de regresión, Low/Info en backlog); spec + plan en `fase_5/`. **Pendiente de cierre:** T13 (corrida real con Ollama + proxy_app y evidencia en `evidence/`) — gate manual con el operador.
 
 ---
 

@@ -1,0 +1,108 @@
+{
+  "capability_id": "lookup_member_balance",
+  "version": "1.0.0",
+  "description": "Searches for a member by ID in the legacy banking console and extracts their savings balance.",
+  "target_app": {
+    "name": "MemberServ",
+    "entry_url": "http://127.0.0.1:5000/"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "member_id": {
+        "type": "string",
+        "description": "Member identifier, e.g. M-1001"
+      }
+    },
+    "required": ["member_id"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "member_name": {
+        "type": "string",
+        "description": "Full name of the member"
+      },
+      "savings_balance": {
+        "type": "string",
+        "description": "Savings account balance as displayed on screen"
+      }
+    },
+    "required": ["savings_balance"]
+  },
+  "steps": [
+    {
+      "step_id": 1,
+      "action_type": "navigate",
+      "description": "Open the banking console home page",
+      "locators": [
+        {"type": "id", "value": "main"},
+        {"type": "css", "value": "body"}
+      ],
+      "value": "http://127.0.0.1:5000/",
+      "timeout_ms": 5000
+    },
+    {
+      "step_id": 2,
+      "action_type": "type",
+      "description": "Enter the member ID into the search box",
+      "locators": [
+        {"type": "id", "value": "q"},
+        {"type": "css", "value": "input[name='q']"},
+        {"type": "xpath", "value": "//input[@type='text']"}
+      ],
+      "value": "{{input.member_id}}",
+      "timeout_ms": 5000
+    },
+    {
+      "step_id": 3,
+      "action_type": "click",
+      "description": "Submit the member search",
+      "locators": [
+        {"type": "css", "value": "input[type='submit']"},
+        {"type": "text", "value": "Search"}
+      ],
+      "timeout_ms": 5000
+    },
+    {
+      "step_id": 4,
+      "action_type": "click",
+      "description": "Open the member detail record",
+      "locators": [
+        {"type": "text", "value": "View Detail"},
+        {"type": "css", "value": "table.results a"}
+      ],
+      "timeout_ms": 5000
+    },
+    {
+      "step_id": 5,
+      "action_type": "extract",
+      "description": "Extract the member name from the detail header",
+      "locators": [
+        {"type": "css", "value": "#memberName"},
+        {"type": "xpath", "value": "//h2[@class='member-name']"}
+      ],
+      "output_key": "member_name",
+      "timeout_ms": 5000
+    },
+    {
+      "step_id": 6,
+      "action_type": "extract",
+      "description": "Extract the savings balance from the accounts table",
+      "locators": [
+        {"type": "css", "value": "#accountsTable td.savings"},
+        {"type": "xpath", "value": "//table[@id='accountsTable']//td[1]"}
+      ],
+      "output_key": "savings_balance",
+      "timeout_ms": 5000
+    }
+  ],
+  "checkpoint": {
+    "description": "Savings balance cell is visible on the member detail page",
+    "locators": [
+      {"type": "css", "value": "#accountsTable td.savings"},
+      {"type": "id", "value": "accountsTable"}
+    ],
+    "expected_condition": "visible"
+  }
+}

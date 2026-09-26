@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Search - MemberServ{% endblock %}
+{% block content %}
+<h1>Member Search</h1>
+<form action="/members/search" method="get">
+  <label for="q">Member ID or Name:</label>
+  <input type="text" id="q" name="q" size="30" value="">
+  <input type="submit" class="btn" value="Search">
+</form>
+<p class="muted">Enter a member ID (e.g. M-1001) or a full/partial name.</p>
+{% endblock %}

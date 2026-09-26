@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}Error 404 - MemberServ{% endblock %}
+{% block content %}
+<h1>Page Not Found</h1>
+<p class="notfound">The requested record was not found: <b>{{ member_id }}</b>.</p>
+<p>Please verify the member ID and try again, or return to <a href="/">member search</a>.</p>
+{% endblock %}

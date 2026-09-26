@@ -179,3 +179,13 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+
+# Volatile run output (only .gitkeep files are tracked)
+evidence/*
+!evidence/.gitkeep
+data/*
+!data/.gitkeep
+output/*
+!output/.gitkeep
+.tmp/*
+!.tmp/.gitkeep

@@ -1,0 +1,626 @@
+## Interface.ai Interview 
+
+ 4 fuentes·18 sept 2026
+
+Las fuentes presentan a **interface.ai**, una compañía especializada en **agentes de inteligencia artificial** diseñados para modernizar la banca mediante la automatización de tareas complejas. El núcleo tecnológico se centra en un sistema de **"uso de computadora"** que permite a la IA operar aplicaciones financieras heredadas sin necesidad de APIs, convirtiendo descubrimientos iniciales en **automatizaciones deterministas y reutilizables**. A través de su plataforma **BankGPT**, la empresa busca unificar la fragmentada vida financiera de los usuarios ofreciendo asesoría personalizada y ejecución autónoma de transacciones. Además, se detalla un **proyecto técnico de contratación** que evalúa la capacidad de los ingenieros para construir este puente entre el razonamiento de los modelos de lenguaje y la ejecución técnica sobre interfaces reales. El enfoque prioritario de estas herramientas es garantizar la **seguridad de los datos** y la precisión operativa en entornos bancarios altamente regulados.
+
+hazme un resumen de las condiciones y que se pide en la entrevista técnica
+
+La prueba técnica de **interface.ai** para la posición de **Applied AI Engineer - Hiring Automation (Office of the CEO)** consiste en la elaboración de un proyecto práctico (*Take-Home Project*) denominado **Computer-Use Automation System**[1][2]. Todos los aspirantes reciben la misma asignación, la cual es revisada directamente por el equipo de ingeniería[2][3]. En caso de superar esta evaluación, la siguiente fase corresponde a una entrevista con el equipo directivo para discutir el diseño y las decisiones implementadas[3].
+
+---
+
+### 1\. Condiciones Generales y Reglas de Entrega
+
+* **Tiempo de ejecución (** **Time-box** **)**: No existe una fecha límite estricta (*no deadline*), pero se espera un esfuerzo enfocado y autogestionado en lugar de un desarrollo prolongado de un mes[1].
+* **Uso de Asistentes de IA**: Se asume y fomenta el uso de herramientas de asistencia como Cursor, Claude o Copilot[5][6]. No obstante, el candidato debe ser el dueño del código entregado y ser capaz de defender minuciosamente cada decisión de arquitectura y desarrollo[3][6].
+* **Consumo de API y Credenciales**: El candidato debe aportar su propio acceso a la API del LLM elegido para generar la corrida real de descubrimiento exigida[7].
+* **Formato de Entrega**: La solución debe alojarse en un repositorio público de GitHub y enviarse por correo a `assignments@interface.ai` desde la misma dirección utilizada al postular, incluyendo la URL del repositorio en una sola línea y sin adjuntar archivos ZIP[3][8].
+* **Enfoque de Desarrollo (** **Vertical Slice** **)**: Se requiere construir un corte vertical completo (*end-to-end*) que conecte todos los requisitos núcleo de forma funcional[5]. Se evalúa la calidad del juicio técnico, los esquemas de datos y la robustez del diseño por encima de la cantidad de características o la construcción prematura de infraestructura de escalado[1].
+
+---
+
+### 2\. ¿Qué se pide construir?
+
+El objetivo principal es desarrollar un sistema de automatización mediante uso de computadora (*Computer-Use Automation System*) que sirva como la capa de ejecución o "manos" de un agente de inteligencia artificial[1][2]. El flujo completo consta de las siguientes fases interconectadas[10]:
+
+1. **Descubrimiento por LLM**: Un bucle donde el LLM analiza una interfaz gráfica real (UI) sin API y realiza acciones para cumplir una meta específica[2][10].
+2. **Generación de Artefacto**: La conversión del flujo exitoso en una capacidad reutilizable y tipada[11].
+3. **Reejecución Determinista**: La ejecución del artefacto guardado sin invocar al LLM en el bucle de decisión[12][13].
+4. **Escalado Humano**: La capacidad de pausar y transferir la sesión en vivo a un operador humano cuando el sistema se bloquea[13].
+
+---
+
+### 3\. Requisitos Núcleo Obligatorios (Core Requirements)
+
+El sistema debe satisfacer seis componentes fundamentales descritos en la especificación[10]:
+
+* **Bucle del Agente Basado en Objetivos (** **Goal-Driven Agent Loop** **)**: Debe recibir una meta y una aplicación objetivo, ejecutando un bucle continuo de observación, decisión y acción (`observe → decide → act`) sobre la interfaz gráfica (clics, escritura, navegación) hasta alcanzar la meta o una condición de parada[10]. Debe interactuar con una superficie real y guardar la evidencia de la ejecución en el repositorio[7][10].
+* **Esquema de Artefacto Estructurado**: Al completar el objetivo, debe guardar un archivo serializable, versionado y tipado que represente la capacidad[11][18]. Debe definir la secuencia de pasos, la estrategia de localización de controles, los parámetros de entrada requeridos, los datos de salida a extraer y una condición de verificación de éxito (*checkpoint*)[18].
+* **Reejecución Determinista (** **Deterministic Replay** **)**: Representa la vía de producción donde se ejecuta el artefacto utilizando únicamente parámetros de entrada, sin consultar al LLM para tomar decisiones de navegación[12]. Debe utilizar identificadores estables y manejar de forma explícita los errores de tiempo de ejecución[12].
+* **Taxonomía de Errores y Excepciones**: El motor de reejecución debe diferenciar explícitamente entre:
+  * **Resultados de negocio esperados**: Respuestas legítimas del sistema como "usuario no encontrado"[12][16].
+  * **Condiciones recuperables**: Situaciones transitorias como cerrar un diálogo emergente o reintentar una carga lenta[12][16].
+  * **Fallos duros**: Interrupciones críticas que deben detener la ejecución e informar el paso y contexto del error[12][16].
+* **Barreras de Seguridad (** **Safety Guardrails** **)**: Restricción de acciones mediante una lista configurable de dominios/rutas permitidas (*allowlist*), así como medidas para no filtrar ni persistir información financiera sensible[13][16].
+* **Intervención Humana (** **Human-in-the-Loop Escalation &amp; Handoff** **)**: Capacidad de detectar cuándo el sistema se encuentra atascado o ante un paso de alto riesgo, generando una solicitud de intervención con contexto (captura de pantalla, paso actual y motivo)[14]. Debe permitir que un humano tome el control de la *misma* sesión en vivo, realice las acciones manuales y transfiera el control de regreso a la automatización para reanudar el proceso[15].
+* **Diseño para Heterogeneidad y Multitenencia**: Justificación en el informe de diseño sobre cómo la arquitectura se extendería a aplicaciones web heredadas o de escritorio, y cómo reutilizar artefactos entre múltiples instituciones (*tenants*) que utilizan una misma aplicación base con configuraciones distintas[17][19].
+
+---
+
+### 4\. Estructura Exacta de Entregables en GitHub
+
+El repositorio público de GitHub debe organizarse obligatoriamente bajo la siguiente estructura de archivos[20]:
+
+1. **/README.md**:
+  * Instrucciones claras para configurar y ejecutar el entorno (incluyendo claves de API o configuraciones)[20].
+  * Ruta de demostración (*demo path*) con los comandos exactos para ejecutar la corrida de descubrimiento y posteriormente la reejecución determinista[20].
+2. **/REPORT.md**:
+  * Memoria técnica de 1 a 3 páginas dividida exactamente en **siete secciones**:
+    1. **Architecture**: Descripción de la arquitectura general y compromisos asumidos[20].
+    2. **Artifact schema**: Estructura y diseño del esquema del artefacto[20].
+    3. **Determinism &amp; error handling**: Estrategias de localización estable, manejo de excepciones y deriva de interfaz[20][21].
+    4. **Heterogeneity &amp; multi-tenant**: Extensión del diseño a superficies heredadas, de escritorio y multitenencia[21].
+    5. **Escalation &amp; handoff**: Mecanismos de detección de bloqueos y transferencia de control humano[21].
+    6. **Safety**: Modelo de barreras de seguridad e interacciones permitidas[21].
+    7. **Cuts**: Recortes deliberados de alcance y siguientes pasos prioritarios[21].
+3. **/evidence/**:
+  * Muestras reales que acrediten el funcionamiento del sistema: el artefacto generado, logs de la fase de descubrimiento y logs de la reejecución determinista[21].
+  * Se solicita incluir al menos una reejecución que enfrente un error o estado de excepción manejado para demostrar el reporte estructurado del sistema[21].
+
+---
+
+### 5\. Criterios de Evaluación
+
+El equipo de evaluación de **interface.ai** ponderará la entrega según los siguientes criterios prioritarios[22]:
+
+* **Diseño del sistema**: Claridad en la separación de módulos, modelo de datos y diseño del esquema del artefacto[22].
+* **Correctitud del bucle principal**: Capacidad del agente para resolver la meta en una interfaz real y ejecutar la reejecución determinista verificando condiciones de éxito[22].
+* **Robustez y manejo de errores**: Taxonomía clara para separar resultados de negocio de fallos duros, junto con estrategias de localización y esperas estables[22].
+* **Mecanismo de escalado a humano**: Viabilidad técnica del modelo de pausado, transferencia de control y reanudación de la sesión en vivo[22].
+* **Generalización del diseño**: Credibilidad en el diseño para soportar superficies heterogéneas y reutilización en múltiples clientes sin requerir grabaciones individuales por tenant[22].
+* **Calidad de código y comunicación**: Código legible, tipado adecuado y claridad expositiva en el reporte técnico[22].
+
+💡 Si deseas profundizar en alguna de las secciones de la prueba (como el diseño del esquema del artefacto o el modelo de traspaso de sesión al operador humano), dime y revisamos los detalles específicos.
+
+dame el roadmap que tengo que serguir para resolver el problema
+
+Para resolver el proyecto técnico de **interface.ai** (*Computer-Use Automation System*) de manera estructurada y garantizar que cumplas con todos los criterios de evaluación, se recomienda seguir un **roadmap por fases** centrado en entregar un **corte vertical completo (** **end-to-end vertical slice** **)**[1]. La evaluación prioriza el juicio técnico, el diseño de arquitectura y la robustez sobre la cantidad de funcionalidades acumuladas[1][2].
+
+---
+
+### Fase 1: Configuración del Entorno y Definición del Alcance (*Setup &amp; Proxy Target*)
+
+1. **Definir el Stack Tecnológico**:
+  * Selecciona el lenguaje de programación (ej. TypeScript o Python) y el marco de automatización (ej. Playwright, Puppeteer o Selenium)[3].
+  * Configura la integración con el proveedor de LLM de tu preferencia (ej. OpenAI GPT-4o, Anthropic Claude 3.5 Sonnet) utilizando tus propias claves de API[3][4].
+2. **Seleccionar la Interfaz Objetivo (** **Proxy Target** **)**:
+  * Elige una aplicación objetivo representativa que permita ejercitar un flujo de negocio multisecuencial (ej. buscar un usuario, llenar un formulario con pasos de confirmación o un flujo de carrito/pago)[5].
+  * Puedes utilizar un sitio de pruebas público, un Sandbox o una aplicación web local que contenga intencionalmente desafíos reales (como tablas anidadas o ausencia de IDs de prueba)[5].
+3. **Inicializar la Estructura Obligatoria del Repositorio**:
+  * Crea un repositorio público en GitHub con la estructura exacta exigida: `/README.md`, `/REPORT.md` y la carpeta `/evidence/`[6][7].
+
+---
+
+### Fase 2: Diseño del Esquema de Artefactos y Contrato de Datos (*Artifact Schema*)
+
+*Esta fase es uno de los puntos centrales de evaluación, ya que el artefacto representa la capacidad reutilizable que los agentes invocan en producción*[8][9]*.*
+
+1. **Modelar la Estructura Tipada del Artefacto**:
+  * Define un esquema serializable (en JSON, YAML, Pydantic o interfaces de TypeScript) que desacople las acciones descubiertas del historial del LLM[10][11].
+2. **Incluir los Campos Esenciales del Esquema**:
+  * **Parámetros de entrada tipados**: Los datos dinámicos requeridos por invocación (ej. `member_id`, `amount`)[8].
+  * **Esquema de salida tipado**: Estructura de los datos que el sistema debe extraer y retornar[8].
+  * **Secuencia de pasos/acciones**: Lista ordenada de comandos a ejecutar (clics, escritura de texto, navegación)[8].
+  * **Estrategia de localización de controles**: Estrategias de selección resilientes para identificar elementos en pantalla de forma estable[8][12].
+  * **Punto de verificación (** **Checkpoint** **)**: Condición o estado de éxito que valida que la meta se cumplió[8][12].
+  * **Metadatos de versión y descripción**: Información clara para que tanto un revisor humano como un agente llamador entiendan qué hace la capacidad[8].
+
+---
+
+### Fase 3: Bucle de Descubrimiento guiado por LLM (*Goal-Driven Discovery Loop*)
+
+1. **Construir el Ciclo** **Observe → Decide → Act**:
+  * Implementa el bucle interactivo donde el agente recibe una meta en lenguaje natural y la URL/punto de entrada[13].
+  * En cada paso, el sistema debe observar la interfaz real (vía DOM, árbol de accesibilidad o capturas de pantalla), decidir la siguiente acción usando el LLM y ejecutarla sobre la UI hasta alcanzar la meta o una condición límite de parada[10].
+2. **Aplicar Barreras de Seguridad (** **Safety Guardrails** **)**:
+  * Configura una lista de permisos (*allowlist*) para restringir que el agente navegue fuera de los dominios o rutas autorizadas[14].
+  * Implementa un manejo conservador para acciones de alto riesgo o irreversibles[15].
+3. **Redacción de Datos Sensibles**:
+  * Asegúrate de que las credenciales, fichas de acceso y datos financieros regulados (PII) sean redactados y jamás se persistan en el artefacto o en los registros[15].
+4. **Exportar el Artefacto Registrado**:
+  * Al finalizar con éxito el objetivo, convierte el flujo ejecutado en la estructura definida en la Fase 2[10][11].
+
+---
+
+### Fase 4: Motor de Reejecución Determinista y Taxonomía de Errores (*Deterministic Replay*)
+
+*En producción, el agente invoca el artefacto guardado directamente mediante el motor de reejecución sin pasar por el LLM*[12][16]*.*
+
+1. **Desarrollar el Motor de Reejecución**:
+  * Crea el componente que toma el artefacto guardado junto con los parámetros de entrada y ejecuta la secuencia paso a paso de forma rápida y determinista[12].
+2. **Estrategia de Espera y Localización Estable**:
+  * Implementa mecanismos de localización que resistan pequeñas variaciones en la interfaz gráfica y esperas explícitas de carga de elementos[12].
+3. **Implementar la Taxonomía de Errores y Excepciones**:
+  * Diferencia de forma explícita entre tres categorías de resultados[12][14]:
+    * **Resultados de negocio esperados**: Respuestas legítimas como "socio no encontrado" que deben retornarse de forma limpia al invocador[12][14].
+    * **Condiciones recuperables**: Situaciones transitorias como desestimar diálogos emergentes o reintentar ante una carga lenta[12][14].
+    * **Fallos duros**: Interrupciones críticas que detienen la ejecución e informan el paso y estado de la falla[12][14].
+4. **Validación del Checkpoint**:
+  * Verifica que la condición de éxito definida en el artefacto se cumpla antes de dar por completada la reejecución[12].
+
+---
+
+### Fase 5: Mecanismo de Escalado e Intervención Humana (*Human-in-the-Loop*)
+
+1. **Detección de Bloqueos (** **Stuck Detection** **)**:
+  * Implementa la lógica para identificar cuándo el sistema no puede avanzar (por reintentos fallidos, errores no recuperables o pasos de alto riesgo)[17].
+2. **Generación de Solicitud de Intervención**:
+  * Emite un evento o paquete de contexto que incluya la captura de pantalla actual, la meta, el paso actual y el motivo por el cual la automatización se detuvo[17].
+3. **Traspaso de Sesión en Vivo (** **Live Session Handoff** **)**:
+  * Diseña el mecanismo para pausar la automatización y transferir el control de la *misma* sesión activa a un operador humano[18].
+  * *Nota de alcance*: No se requiere una consola de co-browsing compleja; una interfaz mínima, simulada o *stubbed* es aceptable siempre que el modelo de transferencia y retoma del control esté bien fundamentado[18].
+4. **Registro de la Intervención y Retoma del Control**:
+  * Permite que el humano realice la acción manual necesaria y devuelva el control al sistema para reanudar o finalizar la ejecución, registrando la evidencia de la intervención[18].
+
+---
+
+### Fase 6: Generación de Evidencias en Vivo (/evidence/)
+
+1. **Ejecución Real de Descubrimiento**:
+  * Corre el bucle guiado por el LLM contra la superficie en vivo para resolver la meta propuesta y guarda los logs estructurados y el artefacto resultante en la carpeta `/evidence/`[4][7].
+2. **Ejecución Real de Reejecución Determinista**:
+  * Ejecuta el motor de reejecución utilizando el artefacto generado y guarda la evidencia del paso a paso exitoso[7].
+3. **Simulación de Escenario de Excepción/Error**:
+  * Corre una reejecución que fuerce un fallo de negocio o condición de excepción (ej. datos de entrada inválidos o elemento no encontrado) para demostrar en los logs cómo el sistema clasifica y reporta el error estructuradamente[7].
+
+---
+
+### Fase 7: Redacción de Informes y Documentación (/REPORT.md y /README.md)
+
+1. **Elaborar** **/REPORT.md** **(1 a 3 páginas)**:
+  * Redacta el informe técnico utilizando obligatoriamente los **siete encabezados exactos** requeridos[6][7]:
+    1. **Architecture**: Compromisos de diseño y arquitectura general[6].
+    2. **Artifact schema**: Justificación del diseño del esquema del artefacto[6].
+    3. **Determinism &amp; error handling**: Estrategias de localización estable, manejo de esperas y taxonomía de excepciones[6][7].
+    4. **Heterogeneity &amp; multi-tenant**: Propuesta conceptual sobre cómo extender la arquitectura a aplicaciones de escritorio o web heredadas, y cómo reutilizar artefactos entre múltiples instituciones (*tenants*)[7][19].
+    5. **Escalation &amp; handoff**: Detección de bloqueos y modelo de transferencia de sesión[7].
+    6. **Safety**: Modelo de barreras de seguridad, listas de permisos y redacción de PII[7].
+    7. **Cuts**: Recortes deliberados de alcance y siguientes pasos prioritarios[7][20].
+2. **Elaborar** **/README.md**:
+  * Detalla los pasos para instalar y configurar el proyecto (incluyendo variables de entorno)[6].
+  * Define la **ruta de demostración (** **demo path** **)** con los comandos exactos para ejecutar la corrida de descubrimiento y la reejecución[6].
+
+---
+
+### Fase 8: Revisión Final y Entrega
+
+1. **Verificar Cumplimiento de Reglas**:
+  * Confirma que no se hayan subido credenciales, claves de API ni datos PII al repositorio[15][21].
+  * Revisa que todo el código esté limpio, tipado y que los archivos estén ubicados en las rutas exactas solicitadas[6][9].
+  * Prepárate para defender minuciosamente cada decisión técnica y de diseño tomada durante el desarrollo[1].
+2. **Enviar el Proyecto**:
+  * Publica el repositorio en GitHub como público[6][24].
+  * Envía un correo a `assignments@interface.ai` desde la dirección con la que te postulaste, colocando únicamente la URL del repositorio en una sola línea[23][24].
+
+---
+
+💡 **¿Deseas profundizar en algún aspecto específico del desarrollo**, como el diseño preciso del esquema JSON para el artefacto o la estrategia de implementación para la pausa y traspaso de la sesión en vivo?
+
+Fase 1:
+
+1. para el punto voy a utilizar python con selenium por ejemplo porque creo que son los mejores. Utilizaré un modelo local de ollama, qwen2.5-coder:7b.
+2. utilizaré una aplicación web local.
+3. la información estará en el readme.md
+
+todo el proyecto será en inglés, es algo que tengo que poner como requerimiento.
+
+Fase 2:
+
+1. JSON
+2. por definir
+
+estas son mis decidiones en cada fase
+
+Tus decisiones para la **Fase 1** son muy acertadas y están bien alineadas con la flexibilidad que otorga la prueba técnica[1]. Además, para la **Fase 2**, te presento una propuesta concreta para estructurar el esquema JSON.
+
+---
+
+### Análisis y Feedback de tus decisiones (Fase 1)
+
+1. **Stack (Python + Selenium)**:
+  * **Evaluación**: Es una combinación sólida y ampliamente extendida en automatización.
+  * **Recomendación de arquitectura**: Dado que la prueba evalúa el determinismo y la resiliencia en la reejecución[4][5], asegúrate de implementar esperas explícitas (*WebDriverWait*) en lugar de esperas fijas (*sleep*). Esto evitará ejecuciones frágiles (*flaky tests*) ante retardos en la carga de la interfaz[4][6].
+2. **Modelo LLM (Ollama con** **qwen2.5-coder:7b** **)**:
+  * **Evaluación**: Usar un modelo local es una excelente alternativa sin costo de API[1][3]. `qwen2.5-coder:7b` destaca en razonamiento estructurado y generación de código o JSON.
+  * **Punto clave de diseño**: Al ser un modelo enfocado en código/texto (sin capacidades de visión directa como un modelo multimodal), el bucle de observación (`observe`) debe extraer y limpiar la representación textual de la pantalla —por ejemplo, un HTML simplificado del DOM o el árbol de accesibilidad[7][8]. Este enfoque está alineado con la especificación para lidiar con interfaces sin DOM limpio[7][8].
+3. **Aplicación objetivo (Aplicación Web Local)**:
+  * **Evaluación**: Crear o levantar una app web local propia te otorga control absoluto para diseñar escenarios realistas de banca o back-office (formularios multipasos, búsquedas de socios, tablas, modales emergentes y mensajes de error como "socio no encontrado")[2][6].
+4. **Requisito de Idioma (Todo en Inglés)**:
+  * **Evaluación**: **Decisión crítica y acertada**. Dado que el equipo evaluador de interface.ai opera en un entorno internacional, tanto el código como la documentación (`README.md`, `REPORT.md`) y los registros (`logs` en `/evidence/`) deben redactarse en **inglés**[5].
+
+---
+
+### Propuesta para definir la Fase 2: Esquema JSON del Artefacto (`Artifact Schema`)
+
+La especificación exige que el artefacto sea serializable, versionado y tipado, actuando como un contrato claro entre el invocador y el motor de reejecución determinista[8][11].
+
+A continuación tienes una estructura JSON recomendada que satisface todos los requisitos núcleo exigidos por la prueba[11]:
+
+```
+{
+  "capability_id": "lookup_member_balance",
+  "version": "1.0.0",
+  "description": "Searches for a credit union member by ID and extracts their current savings balance.",
+  "target_app": {
+    "name": "CoreBankingLocalApp",
+    "entry_url": "http://localhost:8080/servicing/search"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "member_id": {
+        "type": "string",
+        "description": "Unique identifier of the financial member"
+      }
+    },
+    "required": ["member_id"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "savings_balance": {
+        "type": "string",
+        "description": "Extracted savings balance formatted as currency"
+      },
+      "account_status": {
+        "type": "string",
+        "description": "Active, Pending, or Closed"
+      }
+    },
+    "required": ["savings_balance"]
+  },
+  "steps": [
+    {
+      "step_id": 1,
+      "action_type": "type",
+      "description": "Enter the member ID in the search box",
+      "locators": [
+        {"type": "id", "value": "member-search-input"},
+        {"type": "xpath", "value": "//input[@name='memberId']"},
+        {"type": "css", "value": "form.search-form input[type='text']"}
+      ],
+      "value": "{{input.member_id}}",
+      "timeout_ms": 5000
+    },
+    {
+      "step_id": 2,
+      "action_type": "click",
+      "description": "Click the search button",
+      "locators": [
+        {"type": "id", "value": "btn-search-member"},
+        {"type": "xpath", "value": "//button[contains(text(), 'Search')]"}
+      ],
+      "timeout_ms": 5000
+    },
+    {
+      "step_id": 3,
+      "action_type": "extract",
+      "description": "Extract savings balance from summary table",
+      "locators": [
+        {"type": "css", "value": "#savings-balance-val"},
+        {"type": "xpath", "value": "//td[contains(@class, 'balance-savings')]"}
+      ],
+      "output_key": "savings_balance"
+    }
+  ],
+  "checkpoint": {
+    "description": "Verify search results container is visible and not empty",
+    "locators": [
+      {"type": "css", "value": ".member-details-card"}
+    ],
+    "expected_condition": "visible"
+  }
+}
+
+```
+
+#### Ventajas de este esquema:
+
+* **Estrategia de localización alternativa (** **Fallback Locators** **)**: Cada paso incluye una lista priorizada de localizadores (`locators`) para aportar resiliencia frente a pequeñas variaciones en la interfaz[4][11].
+* **Parámetros dinámicos (** **{{input.member\_id}}** **)**: Permite desacoplar el flujo grabado de los datos reales de ejecución en producción[8][11].
+* **Checkpoint explicito**: Proporciona la condición de validación requerida para confirmar el éxito del flujo antes de finalizar la reejecución[4][11].
+
+---
+
+🎯 **¿Te parece bien este esquema para dar por aprobadas las Fases 1 y 2, o te gustaría ajustar algún campo en la definición del JSON antes de pasar al diseño del bucle de la Fase 3?**
+
+vale perfecto. Me puedes generar un informe detallando todos los puntos relevantes del problema, las fases propuestas y mis decisiones. QUiero también que se destaque los puntos dificiles y con los que hay que tener cuidado en cada punto y cada parte del problema.
+
+Este es el prompt con el que he generado antes el informe: "Actúa como un analista experto en gestión de proyectos y redacción técnica. Basándote exclusivamente en la información de las fuentes adjuntas, genera un informe descriptivo, riguroso y estructurado sobre el problema expuesto en la documentación.
+
+Estructura el informe exactamente en las siguientes secciones:
+
+1. Resumen Ejecutivo
+
+  * Síntesis clara del contexto, la necesidad clave y el valor final esperado.
+2. Diagnóstico del Problema
+
+  * Definición precisa de la problemática principal.
+  * Contexto y causa raíz (según lo expuesto en las fuentes).
+3. Dificultades y Puntos Críticos a Resolver (Obstáculos / Blockers)
+
+  * Lista detallada de las barreras técnicas, operativas o de recursos identificadas.
+  * Evaluación del impacto de cada dificultad en el éxito del proyecto.
+4. Objetivos del Proyecto
+
+  * Objetivo Principal: Definición clara, inequívoca y cuantificable (si aplica) del estado final deseado.
+  * Objetivos Secundarios: Hitos intermedios necesarios para alcanzar la meta global.
+5. Plan de Acción ("Qué se debe hacer")
+
+  * Hoja de ruta cronológica o metodológica con las tareas esenciales necesarias para superar las dificultades identificadas.
+6. Matriz de Entregables
+
+  * Lista estructurada (o tabla) con cada entregable tangible (documentos, código, sistemas, reportes, etc.).
+  * Criterios de aceptación o condiciones para considerar completado cada entregable.
+
+Instrucciones de estilo y rigor:
+
+* Tono: Profesional, analítico, directo y libre de ambigüedades.
+* Formato: Utiliza encabezados representativos, negritas en términos clave y listas con viñetas para facilitar la lectura.
+* Fidelidad a las fuentes: Basa cada afirmación en los documentos cargados. Si falta información relevante sobre algún punto, añade un apartado al final titulado "Vacíos de información identificados."
+
+# Informe Técnico y Estratégico: Sistema de Automatización de Uso de Computadora (*Computer-Use Automation System*)
+
+---
+
+## 1\. Resumen Ejecutivo
+
+El presente informe establece el diagnóstico, arquitectura y plan de acción para el desarrollo del proyecto **Computer-Use Automation System** de **interface.ai**[1][2]. La necesidad central de las instituciones financieras (bancos comunitarios y cooperativas de crédito) radica en la existencia de una "larga cola" de aplicaciones *back-office* heredadas que carecen por completo de APIs de integración[2][3]. Para que los agentes de inteligencia artificial puedan operar en estos entornos, se requiere una capa de ejecución capaz de interactuar con la interfaz gráfica (UI) tal como lo haría un operador humano[2].
+
+El valor fundamental de la solución consiste en un modelo de **descubrimiento único y reejecución múltiple (** **record-once / replay-many** **)**[2][4]. En la fase de descubrimiento, un modelo de lenguaje grande (LLM) explora la interfaz para cumplir un objetivo e independiza el flujo aprendido en un **artefacto estructurado, versionado y tipado**[2]. En la fase de producción, dicho artefacto se ejecuta de forma **determinista y económica**, eliminando al LLM del bucle de decisión[2].
+
+Se integran en este plan las decisiones técnicas estratégicas adoptadas:
+
+* **Lenguaje y Automatización**: Python junto con Selenium WebDriver[9][10].
+* **Modelo LLM de Descubrimiento**: Modelo local Ollama ejecutando `qwen2.5-coder:7b`[9][10].
+* **Entorno de Pruebas (** **Proxy Target** **)**: Aplicación web local con escenarios bancarios realistas[10].
+* **Idioma de Entrega**: Código, registros y documentación (`README.md`, `REPORT.md`) redactados estrictamente en **inglés**[11].
+* **Esquema de Artefacto**: Formato JSON parametrizado con estrategias de *fallback locators* y validación por *checkpoints*[6].
+
+---
+
+## 2\. Diagnóstico del Problema
+
+### Definición de la Problemática
+
+Las soluciones de automatización tradicionales fallan en el sector financiero debido a la disparidad y obsolescencia de los sistemas *core banking* y consolas administrativas[2][3]. Intentar mantener automatizaciones basadas en código rígido o invocar LLMs en cada transacción en vivo resulta inviable por costos de cómputo, latencia e inestabilidad operacional[2].
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            FLUJO OPERATIVO NÚCLEO                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1. DESCUBRIMIENTO (LLM):                                                   │
+│     [Meta en Lenguaje Natural] ──► [Agente LLM] ──► [Acciones UI en vivo]   │
+│                                                            │                │
+│                                                            ▼                │
+│                                               [Artefacto JSON Tipado]       │
+│                                                            │                │
+│  2. REEJECUCIÓN EN PRODUCCIÓN (DETERMINISTA):              │                │
+│     [Parámetros de Entrada] ──► [Motor de Reejecución] ◄───┘                │
+│                                          │                                  │
+│                                          ▼                                  │
+│                            [Resultado de Negocio / Excepción]               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+```
+
+### Contexto y Causa Raíz
+
+De acuerdo con la documentación analizada, la problemática se fundamenta en tres factores críticos del entorno financiero:
+
+1. **Superficies Heterogéneas y Hostiles**: Las aplicaciones carecen de DOMs limpios, no poseen atributos `test-id` y emplean estructuras complejas como tablas anidadas y *framesets*[3][14].
+2. **Escala Multitenant Compleja**: Cientos de instituciones ejecutan miles de instancias de un mismo software base con configuraciones, marcas y versiones distintas[3].
+3. **Excepciones de Tiempo de Ejecución Legítimas**: Aunque las UIs son estables, las ejecuciones enfrentan estados de excepción comunes en banca (socio no encontrado, errores de validación, cierres de sesión, *pop-ups* de advertencia) que quiebran las automatizaciones convencionales[4][8].
+
+---
+
+## 3\. Dificultades y Puntos Críticos a Resolver (Blockers)
+
+A continuación se detallan los obstáculos técnicos identificados y la evaluación de su impacto en el éxito del proyecto:
+
+| Obstáculo Técnico / Blocker                                    | Descripción del Riesgo                                                                          | Impacto en el Proyecto                                                                                                  |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **Fragilidad de Localizadores UI**[3][14]                  | Ausencia de IDs estables o modificadores dinámicos en la interfaz heredada.                     | **ALTO**: Provoca fallos prematuros en la reejecución determinista ante variaciones menores de la interfaz.             |
+| **Confusión en Taxonomía de Errores**[8][14]               | Tratar respuestas de negocio (ej. "usuario no encontrado") como caídas del sistema (*crashes*). | **CRÍTICO**: El error de diseño más común; corrompe el contrato de respuesta hacia el agente principal[8][14].      |
+| **Traspaso de Sesión en Vivo (** **Handoff** **)**[15][16] | Perder el estado del navegador al transferir el control a un operador humano.                   | **CRÍTICO**: Rompe el flujo continuo si se abre un nuevo navegador en lugar de pausar la sesión activa[16].           |
+| **Límites de Modelos Locales Pequeños**[9][17]             | Alucinación del modelo `qwen2.5-coder:7b` al procesar HTML/DOM extenso.                         | **MEDIO-ALTO**: Puede generar bucles infinitos en el descubrimiento si el contexto del DOM es ruidoso[17].            |
+| **Fuga de Datos Sensibles (PII/Secretos)**[7][18]          | Registro inadvertido de credenciales o datos bancarios regulados en artefactos o logs.          | **ALTO**: Incumplimiento de normativas de seguridad bancaria (NCUA / FFIEC) y descalificación del proyecto[18][19]. |
+
+---
+
+## 4\. Objetivos del Proyecto
+
+### Objetivo Principal
+
+Desarrollar, verificar y entregar en un repositorio público de GitHub un **corte vertical completo (** **end-to-end vertical slice** **)** de un sistema de automatización de uso de computadora en Python[1]. El sistema debe ejecutar un bucle de descubrimiento con LLM, generar un artefacto JSON reutilizable y tipado, reejecutarlo deterministamente validando *checkpoints*, gestionar escalados humanos y aplicar barreras de seguridad[5].
+
+### Objetivos Secundarios
+
+1. **Implementar el Bucle Agente**: Ciclo `observe → decide → act` funcional sobre una app web local con control de seguridad (`allowlist`)[17][18].
+2. **Definir el Contrato del Artefacto**: Esquema JSON con entradas/salidas tipadas, *fallback locators* y condición de éxito (*checkpoint*)[6][12].
+3. **Construir el Motor de Reejecución**: Ejecución sin LLM que diferencie explícitamente entre resultados de negocio, fallos recuperables y errores duros[8][21].
+4. **Desarrollar el Mecanismo de Escalado**: Pausa, transferencia de control de la sesión en vivo Selenium al humano y retoma del flujo[15][16].
+5. **Generar Evidencias en Vivo**: Publicación de artefactos y registros en `/evidence/` que incluyan al menos una ejecución con error manejado[22].
+6. **Entregar Documentación Técnica**: Redacción en inglés de `/README.md` (con ruta de demostración) y `/REPORT.md` (con los 7 encabezados obligatorios)[11].
+
+---
+
+## 5\. Plan de Acción y Hoja de Ruta (Roadmap)
+
+Se presenta la hoja de ruta en 6 fases, integrando las decisiones técnicas adoptadas y destacando los **puntos difíciles, bloqueos y trampas (** **pitfalls** **)** en cada etapa.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      HOJA DE RUTA DE IMPLEMENTACIÓN                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  [Fase 1: Setup &amp; Proxy Target] ──► Python + Selenium + Ollama + Local App  │
+│  [Fase 2: Artifact Schema]      ──► Contrato JSON + Fallbacks + Checkpoint  │
+│  [Fase 3: Discovery Loop]       ──► Bucle Observe-Decide-Act + Allowlist    │
+│  [Fase 4: Replay Engine]        ──► Reejecución + Taxonomía de 3 Niveles    │
+│  [Fase 5: Human-in-the-Loop]    ──► Pausa, Transferencia y Retoma de Sesión │
+│  [Fase 6: Deliverables &amp; Evidence] ──► Logs, /REPORT.md y /README.md (EN)   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+```
+
+### Fase 1: Configuración del Entorno y Proxy Target
+
+* **Acciones**: Configurar el proyecto en Python, instalar Selenium WebDriver, levantar el modelo `qwen2.5-coder:7b` en Ollama y construir la aplicación web local simulada[9].
+* ⚠️ **Puntos Difíciles y Trampas (** **Pitfalls** **)**:
+  * *Trampa de Visión en Modelos de Texto*: El modelo `qwen2.5-coder:7b` procesa texto/código, no imágenes crudas. Intentar pasar capturas de pantalla causará fallos[5][17]. **Solución**: Limpiar el DOM eliminando scripts, estilos y ruido antes de construir el prompt de observación.
+  * *Sincronización Frágil en Selenium*: Utilizar esperas fijas (`time.sleep`) provocará fallos intermitentes (*flaky tests*). **Solución**: Es obligatorio usar `WebDriverWait` para aguardar el estado de los elementos.
+
+### Fase 2: Definición del Esquema del Artefacto JSON
+
+* **Acciones**: Implementar la estructura JSON que contenga `capability_id`, `version`, `input_schema`, `output_schema`, lista ordenada de `steps` (con array prioritario de `locators`) y el `checkpoint`[6][12].
+* ⚠️ **Puntos Difíciles y Trampas (** **Pitfalls** **)**:
+  * *Acoplamiento de Datos de Prueba*: Grabar valores estáticos de la corrida de descubrimiento (ej. "12345") directamente en las acciones[6]. **Solución**: Parametrizar dinámicamente mediante plantillas (ej. `{{input.member_id}}`).
+  * *Localizadores de Un Solo Punto de Fallo*: Usar un único selector XPath absoluto. **Solución**: Incluir un array ordenado de estrategias de localización (`id` → `css` → `xpath semántico`).
+
+### Fase 3: Bucle de Descubrimiento por LLM (`Goal-Driven Discovery`)
+
+* **Acciones**: Desarrollar el ciclo `observe → decide → act`, aplicar la lista de rutas/dominios permitidos (`allowlist`) y la redacción de datos financieros sensibles[17][18].
+* ⚠️ **Puntos Difíciles y Trampas (** **Pitfalls** **)**:
+  * *Bucles Infinitos del Agente*: El LLM puede reintentar indefinidamente una acción fallida. **Solución**: Implementar contadores estrictos de pasos máximos (*max steps*) y detección de estados repetidos.
+  * *Persistencia Inadvertida de Secretos/PII*: Guardar credenciales o datos de prueba regulados en los registros[18]. **Solución**: Aplicar filtros de redacción regex en la capa de registro antes de escribir en disco.
+
+### Fase 4: Motor de Reejecución Determinista y Taxonomía de Errores
+
+* **Acciones**: Crear el ejecutor que consume el artefacto JSON y los parámetros sin invocar al LLM. Implementar la clasificación de errores en 3 niveles y la validación del *checkpoint*[8][21].
+* ⚠️ **Puntos Difíciles y Trampas (** **Pitfalls** **)**:
+  * *Tratar Resultados de Negocio como Crashes*: Clasificar "socio no encontrado" o "cuenta bloqueada" como una excepción no controlada[8][14]. **Solución**: Retornar un contrato con `status: "BUSINESS_OUTCOME"` y el mensaje correspondiente[21].
+  * *Falsas Confirmaciones de Éxito*: Dar por completado un paso porque el clic no lanzó error. **Solución**: Validar explícitamente el estado declarado en el `checkpoint` antes de concluir[6][8].
+
+### Fase 5: Escalado e Intervención Humana (*Human-in-the-Loop*)
+
+* **Acciones**: Desarrollar la lógica para detectar bloqueos (*stuck detection*), emitir el paquete de contexto y pausar/transferir la sesión viva de Selenium al operador[15][16].
+* ⚠️ **Puntos Difíciles y Trampas (** **Pitfalls** **)**:
+  * *El Antipatrón de Destruir/Reiniciar el Navegador*: Abrir una nueva ventana limpia para el humano[16]. **Solución**: La prueba exige transferir el control de la *misma* sesión activa[16]. Se debe pausar el hilo de automatización, ceder el control del driver activo y esperar la señal de reanudación.
+  * *Condiciones de Carrera*: Falta de un indicador explícito de bandera de control (Navegador controlado por IA vs. Humano).
+
+### Fase 6: Generación de Evidencias y Documentación en Inglés
+
+* **Acciones**: Generar los logs de descubrimiento y reejecución en `/evidence/`, redactar `/README.md` y escribir `/REPORT.md` respetando los 7 encabezados obligatorios[11][22].
+* ⚠️ **Puntos Difíciles y Trampas (** **Pitfalls** **)**:
+  * *Incurrir en Errores de Formato o Estructura*: Cambiar los nombres de los 7 encabezados en `REPORT.md`[11]. **Solución**: Utilizar exactamente los nombres requeridos: `Architecture`, `Artifact schema`, `Determinism &amp; error handling`, `Heterogeneity &amp; multi-tenant`, `Escalation &amp; handoff`, `Safety`, y `Cuts`[11][22].
+  * *Redacción Multilingüe*: Entregar documentación en español. **Solución**: Toda la entrega en el repositorio de GitHub debe estar redactada en inglés técnico profesional[11].
+
+---
+
+## 6\. Matriz de Entregables
+
+| Entregable Tangible        | Ruta en Repositorio               | Criterios de Aceptación Obligatorios                                                                                  |
+| -------------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| **Código Fuente**          | `/`                               | Código limpio en Python, estructurado y tipado[9].                                                                  |
+| **Instrucciones de Uso**   | `/README.md`                      | Guía de configuración y *demo path* con comandos exactos para ejecutar descubrimiento y reejecución en inglés[11].  |
+| **Reporte de Diseño**      | `/REPORT.md`                      | Memoria técnica de 1 a 3 páginas estructurada en los 7 encabezados requeridos en inglés[11][22].                  |
+| **Artefacto Ejemplo**      | `/evidence/artifact_example.json` | JSON serializable, versionado y parametrizado emitido tras el descubrimiento[6].                                    |
+| **Logs de Descubrimiento** | `/evidence/discovery_run.log`     | Registro detallado de la fase `observe → decide → act` con el LLM local[17].                                        |
+| **Logs de Reejecución**    | `/evidence/replay_run.log`        | Registro de ejecución determinista exitosa demostrando validación de *checkpoint*[8][22].                         |
+| **Prueba de Excepción**    | `/evidence/replay_exception.log`  | Registro de reejecución que enfrenta un error manejado (ej. "socio no encontrado") y lo clasifica correctamente[8]. |
+
+---
+
+## 7\. Vacíos de Información Identificados
+
+De acuerdo con la documentación analizada, se identifican las siguientes omisiones o limitaciones deliberadas que deben abordarse mediante decisiones de diseño justificadas en el reporte[24]:
+
+1. **Especificaciones de UI de Vendors Reales**: Las fuentes no proporcionan acceso a aplicaciones bancarias reales por razones de seguridad regulatoria[10]. *Mitigación*: Se utiliza la aplicación web local como representación fiel de los patrones de navegación[10].
+2. **Infraestructura Operativa de Escalado Humano**: No se especifica un marco para consolas de *co-browsing* en tiempo real[16]. *Mitigación*: La especificación permite simular (*mock/stub*) la interfaz del operador siempre que el modelo de transferencia de control de la sesión activa sea real y coherente[13][16].
+3. **Plumbing Multitenant y Servidores en la Nube**: Las fuentes excluyen explícitamente la construcción prematura de colas, clusters o bases de datos multitenant[25][27]. *Mitigación*: Se debe abordar la multitenencia y heterogeneidad a nivel de diseño teórico en el apartado correspondiente de `/REPORT.md`[22][25].
+
+---
+
+💡 **Siguiente paso sugerido**: Con este informe detallado y la matriz de entregables definida, ¿deseas que comencemos a redactar el borrador del reporte `/REPORT.md` en inglés con los 7 encabezados exactos para tu repositorio?
+
+vale gracas. Ahora voy a crear el repositorio. Dame un nombre válido según las indicaciones del problema.
+
+En la especificación oficial del problema **no se exige un nombre de repositorio estricto o restrictivo**[1][2]; la única condición obligatoria es que el repositorio sea **público en GitHub**[1][2].
+
+Dado que el problema enfatiza el buen juicio técnico y la claridad organizativa[1][3], lo ideal es utilizar la convención estándar *kebab-case* (letras minúsculas separadas por guiones) con un nombre descriptivo y profesional.
+
+Aquí tienes **tres opciones recomendadas**:
+
+---
+
+### Opciones de Nombre Recomendadas
+
+1. **computer-use-automation-system** *(Opción Principal)*
+  * **Por qué es la mejor**: Coincide exactamente con el título oficial del proyecto asignado en la documentación de la prueba técnica (`Computer-Use Automation System`)[1].
+2. **cua-system** o **interface-cua-system**
+  * **Por qué funciona**: Utiliza el acrónimo estándar de la industria (*Computer-Use Automation*) junto con el nombre de la compañía, siendo un nombre corto y directo.
+3. **computer-use-agent**
+  * **Por qué funciona**: Enfatiza la naturaleza del agente guiado por objetivos y el motor de reejecución.
+
+---
+
+### Recomendación para la Creación del Repositorio
+
+* **Visibilidad**: Asegúrate de marcarlo como **Public** al crearlo[1][2].
+* **Archivos iniciales**: Puedes inicializarlo incluyendo directamente un `.gitignore` para Python (para evitar subir entornos virtuales `.venv` o claves `.env`) y una licencia si lo deseas.
+
+¿Quieres que te prepare una plantilla inicial para el archivo `README.md` con la estructura requerida para ir completando tu proyecto?
+
+dame una descrpción que pueda darle para el repositorio. Respondeme solo con eso
+
+Goal-driven Computer-Use Automation System featuring LLM-based workflow discovery, deterministic replay execution, robust error handling, safety guardrails, and human-in-the-loop escalation for legacy banking UIs.
+
+me piden algún tipo de planos de arquitectura o de uml o similar para planificar y demostrar que son mias las ideas?
+
+**No te piden diagramas ni planos formales de tipo UML estricto** (como diagramas de clases de software tradicionales)[1][2]. Sin embargo, la documentación especifica claramente cómo debe estructurarse la planificación y de qué manera se evalúa la autoría de tus ideas[2].
+
+---
+
+### 1\. ¿Qué se pide exactamente a nivel de arquitectura?
+
+La prueba requiere un **informe de diseño técnico en** **/REPORT.md** (de 1 a 3 páginas) organizado en **siete secciones obligatorias**[2][5]:
+
+1. **Architecture** (Arquitectura y decisiones clave de diseño)[5]
+2. **Artifact schema** (Diseño del esquema del artefacto)[5]
+3. **Determinism &amp; error handling** (Manejo de errores y reejecución)[5]
+4. **Heterogeneity &amp; multi-tenant** (Diseño conceptual para heterogeneidad y multitenencia)[5]
+5. **Escalation &amp; handoff** (Mecanismo de pausado y transferencia a humano)[5]
+6. **Safety** (Barreras de seguridad)[5]
+7. **Cuts** (Recortes deliberados de alcance)[5]
+
+Aunque los diagramas UML no son obligatorios, **incluir diagramas conceptuales simples en Markdown (usando sintaxis Mermaid o esquemas en bloques ASCII)** dentro de `/REPORT.md` o `/README.md` es altamente recomendable[2]. Te ayuda a comunicar con claridad:
+
+* El **flujo de datos**: Diferencia entre el *Bucle de Descubrimiento (LLM)* y la *Reejecución Determinista*.
+* El **modelo de transferencia de control (** **Handoff** **)**: Cómo el sistema se pausa, cede la sesión Selenium al humano y la retoma[5][6].
+
+---
+
+### 2\. ¿Cómo demuestras que las ideas y el código son tuyos?
+
+En **interface.ai** dan por sentado que utilizarás asistentes de inteligencia artificial como Cursor, Claude o Copilot[3]. Por ello, el criterio de evaluación no mide si tecleaste cada línea a mano, sino la calidad de tu **juicio técnico, decisiones de integración y arquitectura**[3].
+
+Para demostrar la autoría e independencia de tu pensamiento, la empresa utiliza el siguiente proceso:
+
+* **Defensa Técnica Directa**: Si el proyecto supera la revisión del equipo de ingeniería, la siguiente fase consiste en una **entrevista y conversación técnica con el equipo directivo/liderazgo**[7].
+* **Defensa de Decisiones y Compromisos (** **Trade-offs** **)**: En esa entrevista deberás explicar y justificar minuciosamente por qué diseñaste el esquema JSON de esa forma, por qué elegiste tu taxonomía de errores y cómo funciona el mecanismo de traspaso de sesión en vivo[3].
+
+---
+
+### 3\. Recomendación Práctica para tu Repositorio
+
+Para dejar en claro tu razonamiento desde el primer vistazo en GitHub, puedes incorporar en el archivo `/REPORT.md`:
+
+1. **Un Diagrama de Flujo en Mermaid o ASCII**: Que muestre el paso de `observe → decide → act` y la persistencia en el artefacto JSON.
+2. **Justificación de los** **Trade-offs**: Explica explícitamente qué alternativas consideraste y por qué elegiste tu enfoque actual (por ejemplo, el uso de *fallback locators* en Selenium o la elección del modelo local Ollama)[2].
+3. **Sección de Recortes (** **Cuts** **)**: Explicar con honestidad qué partes dejaste fuera por tiempo y cómo las construirías en producción demuestra madurez arquitectónica[5][11].
+
+---
+
+¿Te gustaría que te prepare un ejemplo de diagrama en sintaxis **Mermaid** para el flujo de reejecución determinista y transferencia a humano que puedas pegar directamente en tu archivo `/REPORT.md`?

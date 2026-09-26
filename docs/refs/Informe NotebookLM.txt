@@ -1,0 +1,85 @@
+Informe Técnico: Sistema de Automatización de Uso de Computadoras (CUA) para la Operación de Banca Legada
+
+1. Resumen Ejecutivo
+
+La visión estratégica de este sistema consiste en transformar la capacidad de "computer-use" de una IA en una capacidad operativa determinista, de alta fidelidad y bajo coste, diseñada específicamente para las exigencias del sector financiero. Nuestra arquitectura propone desacoplar el razonamiento cognitivo de los Modelos de Lenguaje Extensos (LLM) —utilizados para el descubrimiento inicial— de la ejecución repetitiva en producción, convirtiendo cada interacción exitosa en un artefacto de automatización reutilizable y auditable.
+
+Esta solución responde a la existencia de una "larga cola" de aplicaciones bancarias críticas que carecen de APIs modernas, forzando a los agentes de IA a operar a través de interfaces de usuario (UI) diseñadas para humanos. Al implementar un motor de ejecución determinista, garantizamos:
+
+* Fiabilidad Operativa: Eliminación del riesgo de alucinaciones mediante un control riguroso de estados y transiciones.
+* Reducción de Costes de Inferencia: Optimización del consumo de tokens al eliminar la necesidad de re-razonamiento en tareas conocidas.
+* Escalabilidad Multitenant: Generalización de automatizaciones para productos de proveedores compartidos entre cientos de instituciones financieras.
+* Cumplimiento Normativo: Protección activa de PII y trazabilidad total requerida por reguladores (NCUA/FFIEC).
+
+Este informe establece el marco técnico necesario para integrar estas capacidades en la plataforma BankGPT de interface.ai, permitiendo que la inteligencia financiera actúe de forma autónoma sobre infraestructuras tecnológicas legadas.
+
+2. Diagnóstico del Problema
+
+En el contexto de la banca y las cooperativas de crédito, las operaciones de back-office dependen de sistemas internos donde la UI es el único punto de entrada. Esta realidad hace que el acceso mediante automatización de interfaz sea una necesidad ineludible. El conflicto técnico central radica en la brecha entre la flexibilidad cognitiva del LLM y la rigidez necesaria en un entorno financiero. Nuestra arquitectura debe mitigar las siguientes causas raíz:
+
+1. Inexistencia de APIs: Los sistemas core banking a menudo carecen de interoperabilidad, limitando la integración a la capa visual.
+2. Superficies Heterogéneas: Una mezcla hostil de aplicaciones web modernas, sistemas legados basados en framesets o tablas anidadas, y aplicaciones de escritorio sin selectores CSS estables.
+3. No-Determinismo de la IA: El coste y riesgo operativo de utilizar un LLM para cada clic en una transacción repetitiva es inaceptable en producción.
+
+Estas fricciones operativas se traducen en fallos constantes cuando no se cuenta con una capa de abstracción robusta que gestione la complejidad de las interfaces bancarias.
+
+3. Dificultades y Puntos Críticos a Resolver (Blockers)
+
+Es imperativo anticipar que en la banca el "happy path" es una rareza. Nuestra arquitectura prioriza una Taxonomía de Errores sofisticada para gestionar estados excepcionales sin comprometer la fiabilidad.
+
+* Inestabilidad de Runtime: Las sesiones bancarias sufren de timeouts, lentitud transitoria y errores de carga. Impacto: Sin una gestión de checkpoints y reintentos, el sistema colapsará ante anomalías menores del servidor.
+* Ausencia de Identificadores Estables: Las aplicaciones legadas no poseen "Test IDs". Impacto: Depender de selectores frágiles rompe la automatización. Debemos pivotar hacia el uso de Árboles de Accesibilidad (Accessibility Trees) y coordenadas visuales.
+* Desafío de Multitenencia: Un mismo software de proveedor puede tener variaciones de marca y versión entre cientos de bancos. Impacto: Sin una estrategia de parámetros y generalización, la escalabilidad es nula debido a la necesidad de re-grabar flujos por cada cambio estético.
+* Distinción de Resultados: Existe una confusión común entre fallos técnicos y resultados de negocio. Impacto: Un "Miembro no encontrado" es un resultado de negocio válido; un "Elemento no encontrado" es un fallo técnico. Conflarlos impide la automatización de procesos lógicos.
+
+4. Objetivos del Proyecto
+
+El éxito reside en construir una infraestructura capaz de escalar bajo supervisión regulatoria, no en una simple automatización de macros.
+
+Objetivo Principal
+
+Establecer un sistema de "Grabación-una-vez / Replay-muchas" que capture el conocimiento del modelo en un artefacto serializable, permitiendo una ejecución de producción 100% determinista.
+
+Objetivos Secundarios
+
+1. Loop de Agente Orientado a Objetivos: Capacidad de descubrir caminos en interfaces hostiles usando Playwright o Puppeteer orquestados por IA.
+2. Generación de Artefactos Tipados y Parametrizados: Creación de esquemas (JSON/YAML) que utilicen localizadores robustos y permitan el uso de variables (ej. /member/:id) para soportar multitenencia.
+3. Gestión de Riesgos por Nivel de Acción: Clasificación de interacciones en "Seguras/Reversibles" (lectura de saldo) y "Riesgosas/Irreversibles" (transferencia de fondos), exigiendo confirmación humana para estas últimas.
+4. Mecanismo de Escalado Humano (HITL): Protocolo de transferencia de control que permita a un operador retomar una sesión viva, realizar una acción manual y devolver el control al sistema.
+
+5. Plan de Acción
+
+Nuestra metodología prioriza la robustez de los cimientos técnicos (esquemas y localizadores) para neutralizar los riesgos identificados.
+
+Fase 1: Descubrimiento e Identificación Robusta (LLM-driven)
+
+Implementar el bucle de descubrimiento utilizando Árboles de Accesibilidad como fuente de verdad principal para superar la "Ausencia de Identificadores Estables" en el DOM. Cada acción del LLM debe capturar no solo la intención, sino el contexto semántico del control interactuado.
+
+Fase 2: Abstracción, Serialización y Parametrización
+
+Convertir la traza de descubrimiento en un Artefacto Tipado. Para resolver el "Desafío de Multitenencia", los localizadores deben ser parametrizados (ej. buscar etiquetas por texto o roles ARIA) permitiendo que un mismo flujo funcione en versiones de software con diferentes estilos visuales.
+
+Fase 3: Motor de Ejecución Determinista (Deterministic Replay)
+
+Desarrollar el motor que interpreta el artefacto sin el LLM. Para mitigar la "Inestabilidad de Runtime", el motor debe implementar Checkpoints obligatorios después de cada acción y aplicar la taxonomía que distingue entre "Resultados de Negocio" (ej. saldo insuficiente) y "Fallos de Infraestructura".
+
+Fase 4: Seguridad, Redacción y Escalado HITL
+
+Implementar filtros de seguridad para la redacción de PII en logs. Integrar el puente de intervención humana: ante una acción clasificada como Irreversible o un estado de "bloqueo" (stuck), el sistema debe pausar la sesión, notificar al operador con contexto completo y permitir una reanudación fluida.
+
+6. Matriz de Entregables
+
+La trazabilidad y la evidencia técnica son pilares para la auditoría en el sector financiero.
+
+Entregable	Descripción	Criterios de Aceptación
+Código Fuente (GitHub)	Implementación core del sistema CUA (Agente + Motor de Replay).	Basado en Playwright/Puppeteer con orquestador de LLM desacoplado.
+Documento de Diseño (REPORT.md)	Defensa técnica de decisiones arquitectónicas y trade-offs.	Debe justificar la estrategia de localizadores y la taxonomía de errores.
+Esquema de Artefactos	Definición técnica (JSON/YAML) del contrato de la capacidad.	Versionado, tipado y capaz de manejar parámetros dinámicos y roles de accesibilidad.
+Carpeta de Evidencia	Trazas, logs y capturas de ejecuciones (Discovery vs Replay).	Debe incluir evidencia de gestión de un error de negocio y una intervención humana exitosa.
+
+Vacíos de Información y Suposiciones
+
+* Time Box: Se asume un esfuerzo enfocado en la arquitectura vertical y no en el pulido estético de una consola de operador.
+* Entorno de Prueba: Dada la inaccesibilidad de entornos bancarios reales, se asume el uso de una aplicación web hostil o sandbox como proxy para demostrar la robustez de los localizadores.
+
+Declaración de Integración: El sistema propuesto está diseñado para integrarse nativamente en la infraestructura de BankGPT, dotando a la plataforma de la capacidad única de actuar de manera segura, escalable y regulatoria sobre el legado tecnológico de la banca estadounidense.

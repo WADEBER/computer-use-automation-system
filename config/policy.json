@@ -1,0 +1,46 @@
+{
+  "allowed_origins": ["http://127.0.0.1:5000/"],
+  "allowed_routes": ["/", "/members"],
+  "allowed_action_types": ["navigate", "click", "type", "extract", "select"],
+  "rules": [
+    {
+      "match_url_pattern": "*/execute",
+      "decision": "confirm",
+      "reason": "Irreversible financial execution requires human approval"
+    },
+    {
+      "match_action_type": "extract",
+      "decision": "flag",
+      "reason": "Read of regulated personal/financial data leaves an audit mark"
+    }
+  ],
+  "redaction": {
+    "patterns": [
+      {
+        "name": "secret_assignment",
+        "regex": "(?i)(api[_-]?key|token|secret|password)\\s*[=:]\\s*\\S+",
+        "replacement": "[REDACTED_SECRET]"
+      },
+      {
+        "name": "account_number",
+        "regex": "\\b([A-Z]{3}-)\\d{2}(\\d{2})\\b",
+        "replacement": "\\1****\\2"
+      },
+      {
+        "name": "money_amount",
+        "regex": "\\b\\d+\\.\\d{2}\\b",
+        "replacement": "[REDACTED_AMOUNT]"
+      }
+    ],
+    "literals": ["Alice Hartwell", "Brian Okafor", "Carla Mendes"],
+    "field_keys": [
+      "full_name",
+      "member_name",
+      "account_id",
+      "balance",
+      "amount",
+      "credit_limit",
+      "new_balance"
+    ]
+  }
+}

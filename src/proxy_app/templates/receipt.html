@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Disbursement Receipt - MemberServ{% endblock %}
+{% block content %}
+<h1>Loan Disbursement Receipt</h1>
+
+<div class="overlay" id="receiptPanel">
+  <p><b>Disbursement completed successfully.</b></p>
+  <table>
+    <tr><th>Disbursement No.</th><td>{{ disbursement_no }}</td></tr>
+    <tr><th>Member</th><td>{{ member.full_name }} ({{ member.member_id }})</td></tr>
+    <tr><th>Account</th><td>{{ account_id }}</td></tr>
+    <tr><th>Amount</th><td>{{ "%.2f"|format(amount) }}</td></tr>
+    <tr><th>Resulting Balance</th><td>{{ "%.2f"|format(new_balance) }}</td></tr>
+  </table>
+</div>
+
+<p><a href="/members/{{ member.member_id }}">Back to member detail</a> | <a href="/">Member search</a></p>
+{% endblock %}

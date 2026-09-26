@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Confirm Disbursement - MemberServ{% endblock %}
+{% block content %}
+<h1>Confirm Loan Disbursement</h1>
+
+<div class="overlay" id="confirmPanel">
+  <p>Please review the disbursement summary below and confirm to proceed.</p>
+  <table>
+    <tr><th>Member</th><td>{{ member.full_name }} ({{ member.member_id }})</td></tr>
+    <tr><th>Account</th><td>{{ account_id }}</td></tr>
+    <tr><th>Amount</th><td>{{ "%.2f"|format(amount) }}</td></tr>
+  </table>
+
+  <form action="/members/{{ member.member_id }}/loans/disburse/execute" method="post">
+    <input type="hidden" name="account_id" value="{{ account_id }}">
+    <input type="hidden" name="amount" value="{{ amount }}">
+    <input type="submit" class="btn" name="confirm" value="Confirm Disbursement">
+    <a href="/members/{{ member.member_id }}/loans/disburse">Cancel</a>
+  </form>
+</div>
+{% endblock %}
