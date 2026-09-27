@@ -8,7 +8,7 @@ Reglas y contexto del proyecto para el agente. Leer siempre antes de hacer cambi
 
 Take-home técnico de **interface.ai**: un sistema de automatización computer-use que da "manos" a agentes IA sobre aplicaciones back-office bancarias legadas sin API. Convierte una corrida de descubrimiento con LLM en un artefacto tipado y reutilizable, lo reejecuta de forma determinista sin LLM, escala a un humano en la misma sesión viva cuando se bloquea y aplica guardrails de seguridad sobre datos financieros regulados.
 
-**Estado actual:** Fases 1-4 cerradas (Project Scaffold, Proxy Target App, Artifact Schema, Safety & Policy Core). 139 tests verdes; ruff/format/mypy/bandit en verde; auditoría de seguridad de Fase 4 en `docs/security/audit-2026-09-25-fase-4.md`. Las 9 fases están definidas en `docs/plans/0_plan_maestro.md`.
+**Estado actual:** Fases 1-6 cerradas (Project Scaffold, Proxy Target App, Artifact Schema, Safety & Policy Core, Discovery Loop, Deterministic Replay Engine). 324 tests verdes; ruff/format/mypy/bandit en verde; auditorías de seguridad en `docs/security/` (fase 4 y 5). Pendiente de Fase 5: T13 (corrida real Ollama + proxy_app). Las 9 fases están definidas en `docs/plans/0_plan_maestro.md`.
 
 ---
 

@@ -144,14 +144,16 @@ docs/plans/
 ---
 
 ## Fase 6: Deterministic Replay Engine
-- [ ] Motor que consume artefacto + parámetros de entrada **sin invocar al LLM**
-- [ ] Localización estable con fallback locators y esperas explícitas (`WebDriverWait`)
-- [ ] Validación de `checkpoint` antes de declarar éxito
-- [ ] Devolución de `output_schema` tipado al invocador
-- [ ] Result contract base: success (con outputs)
-- [ ] Tests de replay happy path con la fixture
+- [x] Motor que consume artefacto + parámetros de entrada **sin invocar al LLM**
+- [x] Localización estable con fallback locators y esperas explícitas (`WebDriverWait`)
+- [x] Validación de `checkpoint` antes de declarar éxito
+- [x] Devolución de `output_schema` tipado al invocador
+- [x] Result contract base: success (con outputs)
+- [x] Tests de replay happy path con la fixture
 
 **Cierre:** replay determinista del artefacto de Fase 5 (o fixture) pasa y verifica checkpoint.
+
+**Cerrada:** 2026-09-27 — 28/28 CA verificados en `fase_6/6.spec.md`; 324 tests verdes; ruff/format/mypy/bandit OK; spec + plan en `fase_6/`; CLI `replay` con exit codes 0/10/11/1/2; test estático anti-LLM sobre `replay/`. Desviación menor registrada (nota 12 del plan: `step.timeout_ms` no se propaga al `WebDriverWait` del driver; presupuesto global vía `--max-timeout-ms`). **Pendiente manual:** corrida E2E real (Chrome + proxy_app) compartida con T13 de la Fase 5.
 
 ---
 

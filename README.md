@@ -14,6 +14,7 @@ Built as a take-home technical assignment for **interface.ai**.
 - [The artifact schema](#the-artifact-schema)
 - [The safety policy](#the-safety-policy)
 - [The discovery loop (Phase 5)](#the-discovery-loop-phase-5)
+- [The deterministic replay (Phase 6)](#the-deterministic-replay-phase-6)
 - [Development](#development)
 - [Project structure](#project-structure)
 - [Documentation](#documentation)
@@ -27,7 +28,7 @@ The system turns a one-off LLM discovery run into a reusable automation capabili
 
 1. **Discovery (Phase 5, implemented)** — the `discover` CLI drives an `observe -> decide -> act` loop with a local LLM (Ollama `qwen2.5-coder:7b`). Observe uses a clean DOM/accessibility tree, never raw screenshots (the model is text-only); every action is validated (typed schema + policy enforcement) before it reaches the browser.
 2. **Artifact (Phase 3, implemented)** — discovery output is serialized into a typed JSON contract: ordered steps, prioritized fallback locators, typed input/output schemas and a success checkpoint. This is the "focal point" of the evaluation: a human reviewer or calling agent must understand the capability from the artifact alone.
-3. **Replay (Phase 6, planned)** — the same artifact is executed deterministically, with no LLM in the loop, reusing the same locators, parameters (`{{input.*}}`) and checkpoint.
+3. **Replay (Phase 6, implemented)** — the same artifact is executed deterministically, with no LLM in the loop, reusing the same locators, parameters (`{{input.*}}`) and checkpoint; every action passes the Phase 4 policy and the run returns a typed success/failure result.
 4. **Safety (Phase 4, implemented)** — a JSON policy drives allowlists (origins, routes, action types), action classification (block / confirm / flag) and write-time redaction of secrets/financial PII, enforced without any LLM in the loop.
 5. **Human-in-the-loop (Phase 8, planned)** — blocked runs escalate to a human on the **same live browser session**; no session restarts.
 
@@ -44,12 +45,12 @@ The target application is a deliberately realistic legacy banking console (**Mem
 | 3 | Artifact Schema | Completed |
 | 4 | Safety & Policy Core | Completed |
 | 5 | Discovery Loop (LLM) | Implemented (live run pending) |
-| 6 | Deterministic Replay Engine | Pending |
+| 6 | Deterministic Replay Engine | Implemented (live run pending) |
 | 7 | Error Taxonomy | Pending |
 | 8 | Human-in-the-Loop Handoff | Pending |
 | 9 | Evidence, REPORT & Delivery | Pending |
 
-Current test suite: **261 tests passing** (pytest), with ruff (lint + format), mypy and bandit in green.
+Current test suite: **324 tests passing** (pytest), with ruff (lint + format), mypy and bandit in green.
 
 Roadmap and design decisions: [`docs/plans/0_plan_maestro.md`](docs/plans/0_plan_maestro.md).
 
@@ -95,7 +96,7 @@ Then edit `.env` if needed. **Never commit `.env`** — only `.env.example` (it 
 ### 3. Run the test suite
 
 ```bash
-uv run pytest        # 261 tests
+uv run pytest        # 324 tests
 ```
 
 ### 4. (Optional) Run the target application
@@ -303,12 +304,53 @@ result = run_discovery(config, driver, client, policy)  # typed DiscoveryResult
 
 ---
 
+## The deterministic replay (Phase 6)
+
+The `replay` subcommand re-executes a Phase 3 artifact **step by step with no LLM anywhere in the path**: inputs are validated against `input_schema` before the browser is touched, `{{input.*}}` placeholders are resolved, each action goes through the Phase 4 `enforce()` policy, locators fall back in order under explicit `WebDriverWait`, and the checkpoint gates success before outputs are validated against `output_schema`.
+
+```bash
+uv run computer-use-automation-system replay \
+  --artifact evidence/discovery/artifact.json \
+  --input member_id=M-1001 \
+  [--approved] \
+  [--max-timeout-ms 30000]
+```
+
+Prerequisites: the proxy app running (`uv run python -m proxy_app.app`) and Chrome. No Ollama — replay never calls an LLM (enforced by a static import test over `src/computer_use_automation_system/replay/`).
+
+| Option | Purpose | Default |
+|--------|---------|---------|
+| `--artifact` | Path to a valid Phase 3 artifact JSON (required) | — |
+| `--input` | `key=value` pair for `input_schema` (repeat, at least one; required) | — |
+| `--approved` | Allow `confirm`-verdict actions (e.g. `*/execute` routes) to run | off |
+| `--max-timeout-ms` | Total time budget checked between steps (positive int) | no budget |
+
+**Exit codes**: `0` success, `10` blocked (policy), `11` needs_approval, `1` any other failure (input validation, step, checkpoint, output validation), `2` usage error or unreadable/invalid artifact (message on stderr, no stack trace).
+
+A failure is always a typed `ReplayResult` with `error.stage` in `input_validation` / `step` / `policy` / `checkpoint` / `output_validation` plus a safe message — never a raw exception from the CLI. The policy audit trail (`decisions`: action, URL, verdict, reason) is present on both success and failure.
+
+Library usage (the CLI is a thin wrapper — tests inject a fake driver):
+
+```python
+from computer_use_automation_system.replay import replay
+
+result = replay(artifact, {"member_id": "M-1001"}, driver, policy, approved=False)
+if result.status == "success":
+    print(result.outputs)   # validated against output_schema
+else:
+    print(result.error.stage, result.error.message)
+```
+
+CI covers the full engine with `ReplayFakeDriver` (fixture of 6 steps, locator fallback, policy block/confirm/flag, checkpoint, output validation, determinism) — no browser, no network, no Ollama.
+
+---
+
 ### Commands
 
 | Command | What it does |
 |---------|--------------|
 | `uv sync` | Install/refresh dependencies from `uv.lock` |
-| `uv run pytest` | Run the full test suite (261 tests) |
+| `uv run pytest` | Run the full test suite (324 tests) |
 | `uv run ruff check src/ tests/` | Lint |
 | `uv run ruff format src/ tests/` | Format |
 | `uv run ruff format --check src/ tests/` | Verify formatting (CI) |
@@ -316,6 +358,7 @@ result = run_discovery(config, driver, client, policy)  # typed DiscoveryResult
 | `uvx bandit -r src/ -ll -i` | Security scan (same settings as the CI workflow) |
 | `uv run python -m proxy_app.app` | Run the target app |
 | `uv run computer-use-automation-system discover --goal ... --entry ...` | Run a discovery (Phase 5); no args prints the placeholder |
+| `uv run computer-use-automation-system replay --artifact ... --input ...` | Replay an artifact deterministically (Phase 6) |
 
 ### Test suite
 
@@ -344,7 +387,12 @@ result = run_discovery(config, driver, client, policy)  # typed DiscoveryResult
 | `tests/test_discovery_logging.py` | 5 | JSONL steps, summary, redaction per line |
 | `tests/test_discovery_runner.py` | 11 | Full loop per status, determinism, policy invariant |
 | `tests/test_cli_discover.py` | 10 | Parser, dispatch, exit-code mapping |
-| **Total** | **261** | |
+| `tests/test_replay_models.py` | 12 | Result contract, stage/policy invariants, round-trip |
+| `tests/test_replay_inputs.py` | 10 | input_schema validation, `{{input.*}}` resolution |
+| `tests/test_replay_checkpoint.py` | 7 | visible/text_present/url_contains, fallback, timeout |
+| `tests/test_replay_engine.py` | 18 | Happy path, failure stages, policy gates, determinism, anti-LLM static test |
+| `tests/test_cli_replay.py` | 16 | replay flags, exit codes 0/10/11/1/2, stderr diagnostics |
+| **Total** | **324** | |
 
 ### Quality gates
 
@@ -395,22 +443,28 @@ result = run_discovery(config, driver, client, policy)  # typed DiscoveryResult
 │   │   │   ├── models.py                  # PolicyConfig/Decision/RedactionConfig
 │   │   │   ├── policy.py                  # load_policy / evaluate / enforce
 │   │   │   └── redaction.py               # redact_text / filter / safe_write_text
-│   │   └── cli.py                         # Phase 5: `discover` subcommand
+│   │   ├── replay/                        # Phase 6: deterministic replay engine
+│   │   │   ├── __init__.py                # Public exports (replay, models)
+│   │   │   ├── models.py                  # ReplayResult / ReplayError / DecisionRecord
+│   │   │   ├── inputs.py                  # input_schema validation + {{input.*}}
+│   │   │   ├── checkpoint.py              # visible / text_present / url_contains
+│   │   │   └── engine.py                  # replay(): step loop + enforce (no LLM)
+│   │   └── cli.py                         # Phase 5/6: discover + replay subcommands
 │   └── proxy_app/                         # Phase 2: MemberServ target app
 │       ├── app.py                         # create_app() factory + main()
 │       ├── routes.py                      # Search/detail/disburse flows
 │       ├── data.py                        # Deterministic in-memory seed
 │       └── templates/                     # Legacy-style HTML (no test IDs)
-├── tests/                                 # Flat test suite (261 tests)
+├── tests/                                 # Flat test suite (324 tests)
 │   ├── fixtures/                          # Artifact fixtures
 │   │   ├── valid_artifact.json
 │   │   └── invalid/                       # bad_locator, bad_input_ref, ...
-│   ├── fakes.py                           # FakeLLMClient / FakeDriver (Phase 5)
+│   ├── fakes.py                           # FakeLLMClient / ReplayFakeDriver (Phase 5/6)
 │   └── test_*.py
 ├── docs/
 │   ├── plans/                             # SDD specs and phase plans
 │   │   ├── 0_plan_maestro.md              # Master roadmap (source of truth)
-│   │   ├── fase_1/ ... fase_5/            # spec + implementation plan
+│   │   ├── fase_1/ ... fase_6/            # spec + implementation plan
 │   ├── schemas/artifact.schema.json       # Exported JSON Schema (derived)
 │   ├── refs/                              # Assignment A PDF, research notes
 │   ├── security/                          # Security audit reports
@@ -427,12 +481,12 @@ result = run_discovery(config, driver, client, policy)  # typed DiscoveryResult
 | Document | What it contains |
 |----------|------------------|
 | [`docs/plans/0_plan_maestro.md`](docs/plans/0_plan_maestro.md) | Master roadmap, design decisions, phase status |
-| [`docs/plans/fase_1/1.spec.md`](docs/plans/fase_1/1.spec.md) → `fase_5/5.spec.md` | Functional spec + acceptance criteria per phase |
-| [`docs/plans/fase_1/1.0_project_scaffold.md`](docs/plans/fase_1/1.0_project_scaffold.md) → `fase_5/5.0_discovery_loop.md` | Step-by-step implementation plans (test-first) |
+| [`docs/plans/fase_1/1.spec.md`](docs/plans/fase_1/1.spec.md) → `fase_6/6.spec.md` | Functional spec + acceptance criteria per phase |
+| [`docs/plans/fase_1/1.0_project_scaffold.md`](docs/plans/fase_1/1.0_project_scaffold.md) → `fase_6/6.0_deterministic_replay.md` | Step-by-step implementation plans (test-first) |
 | [`docs/schemas/artifact.schema.json`](docs/schemas/artifact.schema.json) | Machine-readable artifact contract |
 | [`docs/security/audit-2026-09-25-fase-4.md`](docs/security/audit-2026-09-25-fase-4.md) | Phase 4 security audit (findings + remediation) |
 | [`docs/security/audit-2026-09-25-fase-5.md`](docs/security/audit-2026-09-25-fase-5.md) | Phase 5 security audit (findings + remediation) |
-| [`docs/GUIA_USUARIO.md`](docs/GUIA_USUARIO.md) | End-user guide for MemberServ + the `discover` command (Spanish) |
+| [`docs/GUIA_USUARIO.md`](docs/GUIA_USUARIO.md) | End-user guide for MemberServ + the `discover` and `replay` commands (Spanish) |
 | [`CLAUDE.md`](CLAUDE.md) | Repository conventions and agent rules |
 
 ---

@@ -11,6 +11,7 @@
 - [Ver la ficha de un miembro](#-ver-la-ficha-de-un-miembro)
 - [Registrar un préstamo](#-registrar-un-préstamo)
 - [Automatizar tareas con discover](#-automatizar-tareas-con-discover)
+- [Repetir una tarea con replay](#-repetir-una-tarea-con-replay)
 - [Avisos y errores que puedes ver](#-avisos-y-errores-que-puedes-ver)
 - [Preguntas frecuentes](#-preguntas-frecuentes)
 - [Problemas conocidos](#️-problemas-conocidos)
@@ -158,6 +159,60 @@ El proyecto incluye un asistente que realiza una tarea en la consola por ti: le 
 - Reinicia la consola antes de cada corrida si quieres partir de datos limpios.
 - Si usas otro modelo u Ollama en otro puerto, ajusta `OLLAMA_MODEL` y `OLLAMA_BASE_URL` en el archivo `.env`.
 - Las acciones irreversibles (como ejecutar un desembolso) se detienen y piden aprobación antes de pulsarse.
+
+---
+
+## 🔁 Repetir una tarea con `replay`
+
+Cuando ya tienes un "plano" guardado (`artifact.json`, creado por `discover` o incluido en el proyecto), puedes **repetirlo exactamente igual** cuantas veces quieras — sin inteligencia artificial, sin sorpresas y mucho más rápido.
+
+### Qué necesitas antes
+
+1. La consola arrancada: `uv run python -m proxy_app.app`.
+2. Google Chrome instalado.
+3. **No hace falta Ollama**: este comando no usa IA.
+
+### Cómo se usa
+
+1. Abre una terminal en la carpeta del proyecto.
+2. Ejecuta indicando el plano y los datos de entrada (uno o varios `clave=valor`):
+
+   ```bash
+   uv run computer-use-automation-system replay --artifact evidence/discovery/artifact.json --input member_id=M-1001
+   ```
+
+3. Al terminar imprime un resumen: la capacidad, la versión, los datos extraídos (`outputs`) y cuántos pasos ejecutó.
+
+### Opciones disponibles
+
+| Opción | Qué hace | Por defecto |
+|--------|----------|-------------|
+| `--artifact` | Ruta al plano JSON (obligatoria) | — |
+| `--input` | Dato de entrada como `clave=valor`; repítelo si son varios (mínimo uno, obligatorio) | — |
+| `--approved` | Autoriza las acciones que normalmente esperan confirmación (como ejecutar un desembolso) | desactivado |
+| `--max-timeout-ms` | Tiempo total máximo en milisegundos (número entero mayor que 0) | sin límite |
+
+### Códigos de salida del comando
+
+| Código | Significado |
+|--------|-------------|
+| `0` | Terminó con éxito (verificó la pantalla final y los datos pedidos) |
+| `10` | Bloqueado por la política de seguridad |
+| `11` | Necesita aprobación: vuelve a ejecutar con `--approved` |
+| `1` | Falló en algún paso (datos de entrada, elemento no encontrado, pantalla final...) |
+| `2` | Error de uso o el archivo del plano no existe / no es válido |
+
+### Lo que debes saber
+
+- **Es determinista**: con el mismo plano y los mismos datos, siempre hace exactamente lo mismo.
+- **Respeta la misma seguridad que `discover`**: no puede salirse de `http://127.0.0.1:5000/` y las acciones peligrosas siguen pidiendo `--approved`.
+- **Si falla, te dice en qué punto**: el mensaje indica la etapa (`step`, `checkpoint`...) y el paso concreto, sin listados técnicos largos.
+- **Solo se muestran los resultados pedidos**: el resumen imprime los datos extraídos (`outputs`); los valores intermedios no se imprimen.
+
+### Ejemplo
+
+> `uv run computer-use-automation-system replay --artifact evidence/discovery/artifact.json --input member_id=M-1001`
+> -> imprime `replay success: lookup_member_balance v1.0.0` y el saldo extraído.
 
 ---
 
