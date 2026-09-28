@@ -174,3 +174,89 @@ def test_repeatable_inputs_merge(monkeypatch) -> None:
 def test_placeholder_still_prints_without_replay_args(capsys) -> None:
     assert cli.main([]) == 0
     assert "computer-use-automation-system" in capsys.readouterr().out
+
+
+def test_failure_line_includes_failure_category(monkeypatch, capsys) -> None:
+    def fake_execute(artifact, inputs, policy, *, approved, max_timeout_ms):
+        return ReplayResult(
+            status=ReplayStatus.FAILURE,
+            capability_id="lookup_member_balance",
+            version="1.0.0",
+            steps_executed=1,
+            error=ReplayError(
+                stage=ReplayStage.STEP,
+                step_id=2,
+                failure_category="business_outcome",
+                message="failed: element_not_found",
+            ),
+        )
+
+    monkeypatch.setattr(cli, "_execute_replay", fake_execute)
+    code = _run(["--artifact", FIXTURE, "--input", "member_id=M-1001"])
+    assert code == 1
+    out = capsys.readouterr().out
+    assert "business_outcome" in out
+    assert "stage=step" in out
+
+
+def test_success_line_has_no_category(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(cli, "_execute_replay", lambda *a, **k: _success())
+    assert _run(["--artifact", FIXTURE, "--input", "member_id=M-1"]) == 0
+    out = capsys.readouterr().out
+    assert "failure_category" not in out
+    assert "business_outcome" not in out
+
+
+def test_invalid_taxonomy_config_exits_2_with_stderr(monkeypatch, capsys) -> None:
+    from computer_use_automation_system.replay.taxonomy import TaxonomyConfig
+
+    def broken_load():
+        return TaxonomyConfig.model_validate({})
+
+    monkeypatch.setattr(cli, "load_taxonomy", broken_load)
+    code = _run(["--artifact", FIXTURE, "--input", "member_id=M-1001"])
+    assert code == 2
+    captured = capsys.readouterr()
+    assert "taxonomy" in captured.err.lower()
+    assert "Traceback" not in captured.err
+    assert captured.out == ""
+
+
+def test_missing_taxonomy_file_exits_2_with_stderr(monkeypatch, capsys) -> None:
+    def missing_load():
+        raise OSError("config/taxonomy.json not found")
+
+    monkeypatch.setattr(cli, "load_taxonomy", missing_load)
+    code = _run(["--artifact", FIXTURE, "--input", "member_id=M-1001"])
+    assert code == 2
+    captured = capsys.readouterr()
+    assert "taxonomy" in captured.err.lower()
+    assert "Traceback" not in captured.err
+
+
+def test_taxonomy_config_error_does_not_echo_values(monkeypatch, capsys) -> None:
+    from computer_use_automation_system.replay.taxonomy import TaxonomyConfig
+
+    def broken_load():
+        return TaxonomyConfig.model_validate(
+            {
+                "version": "1.0.0",
+                "max_recoverable_attempts": 3,
+                "patterns": {
+                    "business_outcome": ["SENSITIVE-PII-VALUE", ""],
+                    "recoverable": ["Loading"],
+                    "hard": ["denied"],
+                },
+                "recoverable_driver_codes": [],
+                "known_dialogs": [],
+            }
+        )
+
+    monkeypatch.setattr(cli, "load_taxonomy", broken_load)
+    code = _run(["--artifact", FIXTURE, "--input", "member_id=M-1001"])
+    assert code == 2
+    captured = capsys.readouterr()
+    assert "taxonomy" in captured.err.lower()
+    assert "SENSITIVE-PII-VALUE" not in captured.err
+    assert "patterns" in captured.err
+    assert "Traceback" not in captured.err

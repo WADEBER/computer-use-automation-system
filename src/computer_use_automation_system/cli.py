@@ -22,6 +22,7 @@ from computer_use_automation_system.discovery.models import (
 from computer_use_automation_system.discovery.runner import run_discovery
 from computer_use_automation_system.replay.engine import replay as run_replay
 from computer_use_automation_system.replay.models import ReplayResult, ReplayStage, ReplayStatus
+from computer_use_automation_system.replay.taxonomy import load_taxonomy
 from computer_use_automation_system.safety.models import PolicyConfig
 from computer_use_automation_system.safety.policy import load_policy
 
@@ -157,13 +158,26 @@ def _print_replay_result(result: ReplayResult) -> None:
         return
     step = f" step={error.step_id}" if error.step_id is not None else ""
     kind = f" {error.policy_kind}" if error.policy_kind else ""
-    print(f"replay failure: stage={error.stage.value}{step}{kind} {error.message}")
+    category = f" {error.failure_category}" if error.failure_category else ""
+    print(f"replay failure: stage={error.stage.value}{step}{kind}{category} {error.message}")
 
 
 def _run_replay_command(namespace: argparse.Namespace) -> int:
     from pydantic import ValidationError
 
     from computer_use_automation_system.artifact.models import Artifact
+
+    try:
+        load_taxonomy()  # eager validation: bad config -> exit 2, no hot crash
+    except OSError as exc:
+        detail = exc.strerror or "read error"
+        print(f"replay: invalid taxonomy config: {detail}", file=sys.stderr)
+        return 2
+    except ValidationError as exc:
+        # Never echo config values back (CWE-209): only field names.
+        fields = ", ".join(".".join(str(part) for part in err["loc"]) for err in exc.errors())
+        print(f"replay: invalid taxonomy config (fields: {fields})", file=sys.stderr)
+        return 2
 
     artifact_path = Path(namespace.artifact)
     try:

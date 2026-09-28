@@ -35,6 +35,8 @@ class ReplayStage(StrEnum):
 
 PolicyKind = Literal["blocked", "needs_approval"]
 
+FailureCategory = Literal["business_outcome", "recoverable", "hard"]
+
 
 class ReplayError(BaseModel):
     """Why a replay failed: stage, optional step and a safe message."""
@@ -44,6 +46,7 @@ class ReplayError(BaseModel):
     stage: ReplayStage
     step_id: int | None = Field(default=None, ge=1)
     policy_kind: PolicyKind | None = None
+    failure_category: FailureCategory | None = None
     message: str = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -57,6 +60,11 @@ class ReplayError(BaseModel):
                 raise ValueError(f"stage '{self.stage.value}' must not declare 'step_id'")
         elif self.step_id is None:
             raise ValueError(f"stage '{self.stage.value}' requires a 'step_id'")
+        if self.failure_category is not None and self.stage not in (
+            ReplayStage.STEP,
+            ReplayStage.CHECKPOINT,
+        ):
+            raise ValueError("'failure_category' is only allowed for stage 'step' or 'checkpoint'")
         return self
 
 

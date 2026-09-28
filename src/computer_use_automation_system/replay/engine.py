@@ -22,13 +22,20 @@ from computer_use_automation_system.replay.inputs import (
 )
 from computer_use_automation_system.replay.models import (
     DecisionRecord,
+    FailureCategory,
     ReplayError,
     ReplayResult,
     ReplayStage,
     ReplayStatus,
 )
+from computer_use_automation_system.replay.taxonomy import (
+    TaxonomyConfig,
+    classify_failure,
+    load_taxonomy,
+)
 from computer_use_automation_system.safety.models import DecisionKind, PolicyConfig
 from computer_use_automation_system.safety.policy import PolicyViolation, enforce
+from computer_use_automation_system.safety.redaction import redact_text
 
 
 def _synthetic_element(step: Step) -> ObservedElement:
@@ -79,12 +86,16 @@ def replay(
     approved: bool = False,
     step_timeout_ms: int | None = None,
     clock: Callable[[], float] = time.monotonic,
+    taxonomy: TaxonomyConfig | None = None,
 ) -> ReplayResult:
     """Replay `artifact` with `inputs` against `driver`, enforcing `policy`.
 
     Returns a typed `ReplayResult` for every outcome (spec HU-1..HU-4);
-    driver/policy are injected so CI never needs Chrome or a network.
+    driver/policy/taxonomy are injected so CI never needs Chrome or a network.
+    `taxonomy=None` loads `config/taxonomy.json` (same pattern as policy).
     """
+    if taxonomy is None:
+        taxonomy = load_taxonomy()
     started = clock()
     decisions: list[DecisionRecord] = []
 
@@ -107,11 +118,63 @@ def replay(
             error=error,
         )
 
-    def _failure(stage: ReplayStage, message: str, *, steps: int, **kwargs) -> ReplayResult:
+    def _failure(
+        stage: ReplayStage,
+        message: str,
+        *,
+        steps: int,
+        category: FailureCategory | None = None,
+        **kwargs,
+    ) -> ReplayResult:
         return _finish(
             ReplayStatus.FAILURE,
             steps_executed=steps,
-            error=ReplayError(stage=stage, message=message, **kwargs),
+            error=ReplayError(stage=stage, message=message, failure_category=category, **kwargs),
+        )
+
+    def _classify(code: str | None):
+        return classify_failure(code, driver.observe_raw(), taxonomy)
+
+    def _dismiss(locator, step: Step) -> None:
+        """Dismiss a known dialog. Every attempt goes through `enforce()`:
+        a refused verdict records the decision and skips the click."""
+        url = driver.current_url()
+        try:
+            decision = enforce(policy, ActionType.CLICK, url, approved=approved)
+        except PolicyViolation as exc:
+            decision = exc.decision
+            decisions.append(
+                DecisionRecord(
+                    action_type=ActionType.CLICK,
+                    url=url,
+                    decision=decision.decision,
+                    reason=decision.reason,
+                )
+            )
+            return
+        decisions.append(
+            DecisionRecord(
+                action_type=ActionType.CLICK,
+                url=url,
+                decision=decision.decision,
+                reason=decision.reason,
+            )
+        )
+        dismiss_element = ObservedElement(
+            ref=step.step_id,
+            tag="button",
+            role="button",
+            name="dismiss known dialog",
+            locators=[locator],
+        )
+        perform(
+            driver,
+            LLMAction(
+                action=ActionType.CLICK,
+                element_ref=step.step_id,
+                reason="dismiss known dialog",
+            ),
+            dismiss_element,
         )
 
     # 1. Validate inputs (and every {{input.*}} used by the steps) before
@@ -138,17 +201,37 @@ def replay(
                     "replay time budget exceeded",
                     steps=steps_executed,
                     step_id=step.step_id,
+                    category="hard",
                 )
 
         resolved = resolve_value(step.value, inputs)
-        target_url = driver.current_url()
-        if step.action_type is ActionType.NAVIGATE and resolved:
-            target_url = resolved
+        attempts = 0
+        while True:
+            attempts += 1
+            target_url = driver.current_url()
+            if step.action_type is ActionType.NAVIGATE and resolved:
+                target_url = resolved
 
-        try:
-            decision = enforce(policy, step.action_type, target_url, approved=approved)
-        except PolicyViolation as exc:
-            decision = exc.decision
+            try:
+                decision = enforce(policy, step.action_type, target_url, approved=approved)
+            except PolicyViolation as exc:
+                decision = exc.decision
+                decisions.append(
+                    DecisionRecord(
+                        action_type=step.action_type,
+                        url=target_url,
+                        decision=decision.decision,
+                        reason=decision.reason,
+                    )
+                )
+                kind = "blocked" if decision.decision is DecisionKind.BLOCK else "needs_approval"
+                return _failure(
+                    ReplayStage.POLICY,
+                    decision.reason,
+                    steps=steps_executed,
+                    step_id=step.step_id,
+                    policy_kind=kind,
+                )
             decisions.append(
                 DecisionRecord(
                     action_type=step.action_type,
@@ -157,31 +240,38 @@ def replay(
                     reason=decision.reason,
                 )
             )
-            kind = "blocked" if decision.decision is DecisionKind.BLOCK else "needs_approval"
-            return _failure(
-                ReplayStage.POLICY,
-                decision.reason,
-                steps=steps_executed,
-                step_id=step.step_id,
-                policy_kind=kind,
-            )
-        decisions.append(
-            DecisionRecord(
-                action_type=step.action_type,
-                url=target_url,
-                decision=decision.decision,
-                reason=decision.reason,
-            )
-        )
 
-        element = None if step.action_type is ActionType.NAVIGATE else _synthetic_element(step)
-        outcome = perform(driver, _build_action(step, resolved), element)
-        if outcome.outcome != "ok":
+            element = None if step.action_type is ActionType.NAVIGATE else _synthetic_element(step)
+            outcome = perform(driver, _build_action(step, resolved), element)
+            if outcome.outcome == "ok":
+                break
+
+            classification = _classify(outcome.outcome)
+            if (
+                classification.category == "recoverable"
+                and attempts < taxonomy.max_recoverable_attempts
+            ):
+                if classification.dismiss_locator is not None:
+                    _dismiss(classification.dismiss_locator, step)
+                continue
+
+            suffix = (
+                f" (attempts exhausted: {attempts})"
+                if classification.category == "recoverable"
+                else ""
+            )
+            message = redact_text(
+                f"step {step.step_id} ({step.action_type.value}) failed: "
+                f"{outcome.outcome}; classified {classification.category}: "
+                f"{classification.signal}{suffix}",
+                policy.redaction,
+            )
             return _failure(
                 ReplayStage.STEP,
-                f"step {step.step_id} ({step.action_type.value}) failed: {outcome.outcome}",
+                message,
                 steps=steps_executed,
                 step_id=step.step_id,
+                category=classification.category,
             )
 
         steps_executed += 1
@@ -191,11 +281,17 @@ def replay(
     # 3. The checkpoint gates success: no verified state, no success.
     passed, message = check_checkpoint(driver, artifact.checkpoint)
     if not passed:
+        classification = _classify(None)
+        detailed = redact_text(
+            f"{message}; classified {classification.category}: {classification.signal}",
+            policy.redaction,
+        )
         return _failure(
             ReplayStage.CHECKPOINT,
-            message,
+            detailed,
             steps=steps_executed,
             step_id=steps_executed,
+            category=classification.category,
         )
 
     # 4. Outputs must satisfy output_schema before we hand them back.

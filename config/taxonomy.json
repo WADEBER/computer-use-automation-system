@@ -1,0 +1,26 @@
+{
+  "version": "1.0.0",
+  "max_recoverable_attempts": 3,
+  "patterns": {
+    "business_outcome": [
+      "No records found",
+      "Member not found",
+      "The requested record was not found",
+      "Invalid account selection",
+      "Amount is required",
+      "Amount must be a number",
+      "Amount must be greater than zero",
+      "Amount exceeds credit limit"
+    ],
+    "recoverable": [
+      "Loading, please wait",
+      "Please try again"
+    ],
+    "hard": [
+      "Permission denied",
+      "Access denied"
+    ]
+  },
+  "recoverable_driver_codes": ["stale", "timeout"],
+  "known_dialogs": []
+}

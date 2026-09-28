@@ -454,3 +454,428 @@ def test_execute_route_click_is_not_performed_without_approved() -> None:
     assert result.error.policy_kind == "needs_approval"
     assert result.error.step_id == 2
     assert not any(call[0] == "click" for call in driver.calls)
+
+
+def _taxonomy_config(**overrides):
+    from computer_use_automation_system.replay.taxonomy import TaxonomyConfig
+
+    payload = {
+        "version": "1.0.0",
+        "max_recoverable_attempts": 3,
+        "patterns": {
+            "business_outcome": ["No records found"],
+            "recoverable": ["Loading, please wait"],
+            "hard": ["Permission denied"],
+        },
+        "recoverable_driver_codes": ["stale", "timeout"],
+        "known_dialogs": [],
+    }
+    payload.update(overrides)
+    return TaxonomyConfig.model_validate(payload)
+
+
+NOT_FOUND_PAGE = [
+    {"tag": "div", "id": "flash", "text": 'No records found for "zzz"'},
+]
+
+
+def test_step_failure_with_business_signal_is_business_outcome() -> None:
+    pages = {ENTRY: NOT_FOUND_PAGE}
+    artifact = _mini(
+        [
+            Step(
+                step_id=1,
+                action_type=ActionType.TYPE,
+                description="type into a missing field",
+                locators=[Locator(type=LocatorType.CSS, value="#ghost")],
+                value="{{input.q}}",
+            )
+        ],
+        extra_input_properties={"q": {"type": "string"}},
+    )
+    result = replay(
+        artifact,
+        {"q": "zzz"},
+        ReplayFakeDriver(pages, ENTRY),
+        _policy(),
+        taxonomy=_taxonomy_config(),
+    )
+    assert result.status is ReplayStatus.FAILURE
+    assert result.error is not None
+    assert result.error.stage is ReplayStage.STEP
+    assert result.error.failure_category == "business_outcome"
+    assert "No records found" in result.error.message
+    assert "element_not_found" in result.error.message
+
+
+def test_business_signal_beats_hard_pattern_in_engine() -> None:
+    pages = {
+        ENTRY: [
+            {"tag": "div", "text": "Permission denied. No records found."},
+        ]
+    }
+    artifact = _mini(
+        [
+            Step(
+                step_id=1,
+                action_type=ActionType.TYPE,
+                description="type into a missing field",
+                locators=[Locator(type=LocatorType.CSS, value="#ghost")],
+                value="{{input.q}}",
+            )
+        ],
+        extra_input_properties={"q": {"type": "string"}},
+    )
+    result = replay(
+        artifact,
+        {"q": "zzz"},
+        ReplayFakeDriver(pages, ENTRY),
+        _policy(),
+        taxonomy=_taxonomy_config(),
+    )
+    assert result.error is not None
+    assert result.error.failure_category == "business_outcome"
+
+
+def test_step_failure_without_signal_is_hard_and_keeps_code() -> None:
+    driver = ReplayFakeDriver({}, start_url=ENTRY)
+    result = replay(
+        _fixture(),
+        {"member_id": "M-1001"},
+        driver,
+        _policy(),
+        taxonomy=_taxonomy_config(),
+    )
+    assert result.error is not None
+    assert result.error.failure_category == "hard"
+    assert "element_not_found" in result.error.message
+
+
+def test_checkpoint_failure_is_classified_as_hard() -> None:
+    artifact = _mini(
+        [_navigate_step(DETAIL)],
+        checkpoint_locators=[Locator(type=LocatorType.CSS, value="#ghost")],
+    )
+    driver = _driver()
+    result = replay(artifact, {}, driver, _policy(), taxonomy=_taxonomy_config())
+    assert result.error is not None
+    assert result.error.stage is ReplayStage.CHECKPOINT
+    assert result.error.failure_category == "hard"
+
+
+def test_checkpoint_failure_with_business_signal_is_business_outcome() -> None:
+    pages = {DETAIL: NOT_FOUND_PAGE}
+    artifact = _mini(
+        [_navigate_step(DETAIL)],
+        checkpoint_locators=[Locator(type=LocatorType.CSS, value="#ghost")],
+    )
+    result = replay(
+        artifact,
+        {},
+        ReplayFakeDriver(pages, ENTRY),
+        _policy(),
+        taxonomy=_taxonomy_config(),
+    )
+    assert result.error is not None
+    assert result.error.failure_category == "business_outcome"
+    assert "No records found" in result.error.message
+
+
+def test_time_budget_failure_is_hard_category() -> None:
+    ticks = iter([0.0, 10.0, 0.0])
+
+    def clock() -> float:
+        return next(ticks)
+
+    result = replay(
+        _fixture(),
+        {"member_id": "M-1001"},
+        _driver(),
+        _policy(),
+        step_timeout_ms=1000,
+        clock=clock,
+        taxonomy=_taxonomy_config(),
+    )
+    assert result.error is not None
+    assert result.error.failure_category == "hard"
+    assert "budget" in result.error.message
+
+
+def test_non_execution_stages_carry_no_category() -> None:
+    result = replay(_fixture(), {}, _driver(), _policy(), taxonomy=_taxonomy_config())
+    assert result.error is not None
+    assert result.error.stage is ReplayStage.INPUT_VALIDATION
+    assert result.error.failure_category is None
+
+    blocked = replay(
+        _mini([_navigate_step("http://evil.example/")]),
+        {},
+        _driver(),
+        _policy(),
+        taxonomy=_taxonomy_config(),
+    )
+    assert blocked.error is not None
+    assert blocked.error.stage is ReplayStage.POLICY
+    assert blocked.error.failure_category is None
+
+
+def test_engine_loads_default_taxonomy_when_not_injected() -> None:
+    driver = ReplayFakeDriver({}, start_url=ENTRY)
+    result = replay(_fixture(), {"member_id": "M-1001"}, driver, _policy())
+    assert result.error is not None
+    assert result.error.failure_category == "hard"
+
+
+class FlakyTypeDriver(ReplayFakeDriver):
+    """ReplayFakeDriver whose type_text fails with `code` for the first
+    `failures` attempts (then behaves normally). `outcomes` overrides per
+    attempt (None entries succeed); optional `on_failure` hook mutates the
+    page when an attempt fails."""
+
+    def __init__(
+        self,
+        pages: dict[str, list[dict]],
+        start_url: str,
+        code: str = "timeout",
+        failures: int = 1,
+        outcomes: list[str | None] | None = None,
+        on_failure=None,
+    ) -> None:
+        super().__init__(pages, start_url)
+        self._code = code
+        self._failures = failures
+        self._outcomes = outcomes
+        self._on_failure = on_failure
+        self.type_attempts = 0
+
+    def type_text(self, element, text: str) -> None:
+        self.type_attempts += 1
+        if self._outcomes is not None:
+            index = min(self.type_attempts - 1, len(self._outcomes) - 1)
+            outcome = self._outcomes[index]
+            if outcome is not None:
+                if self._on_failure is not None:
+                    self._on_failure(self)
+                from computer_use_automation_system.discovery.act import (
+                    DriverActionError,
+                )
+
+                raise DriverActionError(outcome)
+            return super().type_text(element, text)
+        if self.type_attempts <= self._failures:
+            from computer_use_automation_system.discovery.act import DriverActionError
+
+            raise DriverActionError(self._code)
+        return super().type_text(element, text)
+
+
+def _type_artifact() -> "Artifact":
+    return _mini(
+        [
+            _navigate_step(ENTRY),
+            Step(
+                step_id=2,
+                action_type=ActionType.TYPE,
+                description="type the query",
+                locators=[Locator(type=LocatorType.ID, value="q")],
+                value="{{input.q}}",
+            ),
+        ],
+        checkpoint_locators=[Locator(type=LocatorType.ID, value="q")],
+        extra_input_properties={"q": {"type": "string"}},
+    )
+
+
+def test_recoverable_transient_failure_is_retried_until_success() -> None:
+    pages = {url: [dict(e) for e in els] for url, els in PAGES.items()}
+    driver = FlakyTypeDriver(pages, ENTRY, code="timeout", failures=1)
+    result = replay(
+        _type_artifact(),
+        {"q": "alice"},
+        driver,
+        _policy(),
+        taxonomy=_taxonomy_config(max_recoverable_attempts=3),
+    )
+    assert result.status is ReplayStatus.SUCCESS
+    assert driver.type_attempts == 2
+    assert result.steps_executed == 2
+
+
+def test_recoverable_failure_exhausts_retries_with_category() -> None:
+    pages = {url: [dict(e) for e in els] for url, els in PAGES.items()}
+    driver = FlakyTypeDriver(pages, ENTRY, code="timeout", failures=99)
+    result = replay(
+        _type_artifact(),
+        {"q": "alice"},
+        driver,
+        _policy(),
+        taxonomy=_taxonomy_config(max_recoverable_attempts=3),
+    )
+    assert result.status is ReplayStatus.FAILURE
+    assert result.error is not None
+    assert result.error.failure_category == "recoverable"
+    assert "timeout" in result.error.message
+    assert "attempts exhausted: 3" in result.error.message
+    assert driver.type_attempts == 3
+    assert result.steps_executed == 1
+
+
+def test_hard_failure_is_not_retried() -> None:
+    pages = {url: [dict(e) for e in els] for url, els in PAGES.items()}
+    driver = FlakyTypeDriver(pages, ENTRY, code="element_not_found", failures=99)
+    result = replay(
+        _type_artifact(),
+        {"q": "alice"},
+        driver,
+        _policy(),
+        taxonomy=_taxonomy_config(max_recoverable_attempts=3),
+    )
+    assert result.error is not None
+    assert result.error.failure_category == "hard"
+    assert driver.type_attempts == 1
+
+
+def test_reclassification_each_attempt_can_turn_failure_into_business() -> None:
+    def show_not_found(flaky: FlakyTypeDriver) -> None:
+        if flaky.type_attempts >= 2:
+            flaky.pages[flaky.url].append({"tag": "div", "text": "No records found"})
+
+    pages = {url: [dict(e) for e in els] for url, els in PAGES.items()}
+    driver = FlakyTypeDriver(
+        pages,
+        ENTRY,
+        outcomes=["timeout", "element_not_found"],
+        on_failure=show_not_found,
+    )
+    result = replay(
+        _type_artifact(),
+        {"q": "alice"},
+        driver,
+        _policy(),
+        taxonomy=_taxonomy_config(max_recoverable_attempts=5),
+    )
+    assert result.error is not None
+    assert result.error.failure_category == "business_outcome"
+    assert driver.type_attempts == 2
+
+
+def test_known_dialog_is_dismissed_then_step_retried() -> None:
+    class DialogDriver(ReplayFakeDriver):
+        def type_text(self, element, text: str) -> None:
+            from computer_use_automation_system.discovery.act import DriverActionError
+
+            if any(e.get("role") == "dialog" for e in self.pages.get(self.url, [])):
+                self.type_attempts += 1
+                raise DriverActionError("stale")
+            self.type_attempts += 1
+            return super().type_text(element, text)
+
+        def click(self, element) -> None:
+            super().click(element)
+            if any(loc.value == "#dialog-dismiss" for loc in element.locators):
+                self.pages[self.url] = [
+                    e for e in self.pages[self.url] if e.get("role") != "dialog"
+                ]
+
+        type_attempts = 0
+
+    pages = {url: [dict(e) for e in els] for url, els in PAGES.items()}
+    pages[ENTRY] = pages[ENTRY] + [
+        {"tag": "div", "role": "dialog", "text": "Session about to expire soon"},
+        {"tag": "button", "id": "dialog-dismiss", "text": "Dismiss"},
+    ]
+    taxonomy = _taxonomy_config(
+        max_recoverable_attempts=3,
+        known_dialogs=[
+            {
+                "pattern": "Session about to expire",
+                "dismiss_locator": {"type": "css", "value": "#dialog-dismiss"},
+            }
+        ],
+    )
+    driver = DialogDriver(pages, ENTRY)
+    result = replay(_type_artifact(), {"q": "alice"}, driver, _policy(), taxonomy=taxonomy)
+    assert result.status is ReplayStatus.SUCCESS
+    assert driver.type_attempts == 2
+    assert not any(e.get("role") == "dialog" for e in driver.pages[ENTRY])
+
+
+def test_unknown_dialog_is_neither_dismissed_nor_retried() -> None:
+    class UnknownDialogDriver(ReplayFakeDriver):
+        def type_text(self, element, text: str) -> None:
+            from computer_use_automation_system.discovery.act import DriverActionError
+
+            self.type_attempts += 1
+            if any(e.get("role") == "dialog" for e in self.pages.get(self.url, [])):
+                raise DriverActionError("stale")
+            return super().type_text(element, text)
+
+        type_attempts = 0
+
+    pages = {url: [dict(e) for e in els] for url, els in PAGES.items()}
+    pages[ENTRY] = pages[ENTRY] + [
+        {"tag": "div", "role": "dialog", "text": "Surprise modal"},
+    ]
+    driver = UnknownDialogDriver(pages, ENTRY)
+    result = replay(
+        _type_artifact(),
+        {"q": "alice"},
+        driver,
+        _policy(),
+        taxonomy=_taxonomy_config(max_recoverable_attempts=3),
+    )
+    assert result.error is not None
+    assert result.error.failure_category == "hard"
+    assert "dialog" in result.error.message
+    assert driver.type_attempts == 1
+    assert not any(call[0] == "click" for call in driver.calls)
+
+
+def test_attempts_bound_comes_from_taxonomy_config() -> None:
+    pages = {url: [dict(e) for e in els] for url, els in PAGES.items()}
+    driver = FlakyTypeDriver(pages, ENTRY, code="stale", failures=99)
+    result = replay(
+        _type_artifact(),
+        {"q": "alice"},
+        driver,
+        _policy(),
+        taxonomy=_taxonomy_config(max_recoverable_attempts=1),
+    )
+    assert result.error is not None
+    assert result.error.failure_category == "recoverable"
+    assert "attempts exhausted: 1" in result.error.message
+    assert driver.type_attempts == 1
+
+
+def test_business_message_is_redacted_before_it_is_stored() -> None:
+    taxonomy = _taxonomy_config(
+        patterns={
+            "business_outcome": ["Account 1111-2222-3333-4444 closed"],
+            "recoverable": ["Loading, please wait"],
+            "hard": ["Permission denied"],
+        }
+    )
+    pages = {ENTRY: [{"tag": "div", "text": "Account 1111-2222-3333-4444 closed"}]}
+    artifact = _mini(
+        [
+            Step(
+                step_id=1,
+                action_type=ActionType.TYPE,
+                description="type into a missing field",
+                locators=[Locator(type=LocatorType.CSS, value="#ghost")],
+                value="{{input.q}}",
+            )
+        ],
+        extra_input_properties={"q": {"type": "string"}},
+    )
+    result = replay(
+        artifact,
+        {"q": "zzz"},
+        ReplayFakeDriver(pages, ENTRY),
+        _policy(),
+        taxonomy=taxonomy,
+    )
+    assert result.error is not None
+    assert result.error.failure_category == "business_outcome"
+    assert "1111-2222-3333-4444" not in result.error.message
+    assert "[REDACTED_CARD]" in result.error.message
