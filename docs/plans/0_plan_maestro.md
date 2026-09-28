@@ -60,9 +60,9 @@ docs/plans/
 | 2 | Proxy Target App | `fase_2/2.spec.md` | Completada |
 | 3 | Artifact Schema | `fase_3/3.spec.md` | Completada |
 | 4 | Safety & Policy Core | `fase_4/4.spec.md` | Completada |
-| 5 | Discovery Loop (LLM) | `fase_5/5.spec.md` | En curso |
-| 6 | Deterministic Replay Engine | Pendiente | Pendiente |
-| 7 | Error Taxonomy | Pendiente | Pendiente |
+| 5 | Discovery Loop (LLM) | `fase_5/5.spec.md` | Completada |
+| 6 | Deterministic Replay Engine | `fase_6/6.spec.md` | Completada |
+| 7 | Error Taxonomy | `fase_7/7.spec.md` | Completada |
 | 8 | Human-in-the-Loop Handoff | Pendiente | Pendiente |
 | 9 | Evidence, REPORT & Delivery | Pendiente | Pendiente |
 
@@ -158,16 +158,18 @@ docs/plans/
 ---
 
 ## Fase 7: Error Taxonomy
-- [ ] Taxonomía explícita en el result contract:
+- [x] Taxonomía explícita en el result contract:
   - **Business outcome esperado** (p.ej. member not found) → resultado limpio, no crash
   - **Condición recuperable** (diálogo conocido, carga lenta) → retry/dismiss controlado
   - **Hard failure** → stop + error debuggable (step, esperado, observado)
-- [ ] Detección en replay de validation error, not found, permission denial, dialog inesperado, timeout de sesión, load failure
-- [ ] ≥1 test por cada una de las 3 categorías
-- [ ] Caso de excepción pensado para la evidencia de Fase 9
-- [ ] `/8-auditar` de la fase
+- [x] Detección en replay de validation error, not found, permission denial, dialog inesperado, timeout de sesión, load failure
+- [x] ≥1 test por cada una de las 3 categorías
+- [x] Caso de excepción pensado para la evidencia de Fase 9
+- [x] `/8-auditar` de la fase
 
 **Cierre:** 3 tests de taxonomía en verde; business outcome nunca se clasifica como hard failure.
+
+**Cerrada:** 2026-09-28 — 23/23 CA verificados en `fase_7/7.spec.md`; 381 tests verdes; ruff/format/mypy/bandit OK; spec + plan en `fase_7/`; `failure_category` en el result contract (`business_outcome`/`recoverable`/`hard`) con clasificador determinista (`observe_raw` + `config/taxonomy.json`), reintentos/dismiss controlados sin `time.sleep()` y mensajes pasando por `redact_text`; CLI eager `load_taxonomy()` (exit 2 sin tocar la seam `_execute_replay`). Auditoría `docs/security/audit-2026-09-28-fase-7.md`: 0 Critical/High; SEC-001 y SEC-002 (Low) corregidos en el cierre (§7 del informe), SEC-003 (Info) en backlog; DEF-001..004 en defense-in-depth. **Pendiente manual:** corrida E2E real (Chrome + proxy_app) compartida con T13 de la Fase 5.
 
 ---
 

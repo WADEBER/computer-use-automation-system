@@ -200,19 +200,28 @@ Cuando ya tienes un "plano" guardado (`artifact.json`, creado por `discover` o i
 | `10` | Bloqueado por la política de seguridad |
 | `11` | Necesita aprobación: vuelve a ejecutar con `--approved` |
 | `1` | Falló en algún paso (datos de entrada, elemento no encontrado, pantalla final...) |
-| `2` | Error de uso o el archivo del plano no existe / no es válido |
+| `2` | Error de uso, el archivo del plano no existe / no es válido, o `config/taxonomy.json` no es válido |
 
 ### Lo que debes saber
 
 - **Es determinista**: con el mismo plano y los mismos datos, siempre hace exactamente lo mismo.
 - **Respeta la misma seguridad que `discover`**: no puede salirse de `http://127.0.0.1:5000/` y las acciones peligrosas siguen pidiendo `--approved`.
 - **Si falla, te dice en qué punto**: el mensaje indica la etapa (`step`, `checkpoint`...) y el paso concreto, sin listados técnicos largos.
+- **Los fallos llevan una categoría** (la palabra entre el paso y el motivo) para saber de un vistozo qué hacer:
+  - `business_outcome`: la aplicación respondió bien y la respuesta *es* el resultado (por ejemplo, "No records found"). No es un fallo del sistema: no investigues nada.
+  - `recoverable`: algo transitorio (la página tardó, un mensaje temporal). El sistema ya lo reintentó solo hasta 3 veces; si se agota, vuelve a ejecutar el comando más tarde.
+  - `hard`: fallo real. Revisa la etapa y el paso que indica el mensaje.
+- **Los avisos se ajustan a la aplicación sin tocar código**: si la consola cambia sus textos, actualiza los patrones en `config/taxonomy.json`.
 - **Solo se muestran los resultados pedidos**: el resumen imprime los datos extraídos (`outputs`); los valores intermedios no se imprimen.
 
 ### Ejemplo
 
 > `uv run computer-use-automation-system replay --artifact evidence/discovery/artifact.json --input member_id=M-1001`
 > -> imprime `replay success: lookup_member_balance v1.0.0` y el saldo extraído.
+>
+> Si el miembro no existe, imprime algo como:
+> `replay failure: stage=step step=1 business_outcome step 1 (type) failed: element_not_found; classified business_outcome: page pattern: No records found`
+> -> no es un error del sistema: la aplicación respondió y su respuesta es "no hay registros".
 
 ---
 
@@ -220,6 +229,7 @@ Cuando ya tienes un "plano" guardado (`artifact.json`, creado por `discover` o i
 
 - **Caja roja "The form contains errors"** (formulario): aparece en el paso 2 del préstamo si el importe o la cuenta no son válidos. Corrige lo marcado y vuelve a pulsar **Review Disbursement**.
 - **Caja amarilla "No records found..."** (búsqueda): no hay ningún miembro que coincida con lo escrito.
+- **Línea `replay failure:` en la terminal**: el comando `replay` no ha terminado bien. La línea lleva la etapa (`stage`), el paso, la categoría del fallo (`business_outcome`, `recoverable` o `hard`) y el motivo; el código de salida es `1` (o `2` si el problema es la configuración).
 - **Página "Page Not Found"** (404): has abierto la ficha o el formulario de un miembro que no existe (por ejemplo, un ID mal escrito a mano en la dirección). Verifica el ID y vuelve a la búsqueda.
 
 ---
