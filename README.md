@@ -30,7 +30,7 @@ The system turns a one-off LLM discovery run into a reusable automation capabili
 2. **Artifact (Phase 3, implemented)** — discovery output is serialized into a typed JSON contract: ordered steps, prioritized fallback locators, typed input/output schemas and a success checkpoint. This is the "focal point" of the evaluation: a human reviewer or calling agent must understand the capability from the artifact alone.
 3. **Replay (Phases 6-7, implemented)** — the same artifact is executed deterministically, with no LLM in the loop, reusing the same locators, parameters (`{{input.*}}`) and checkpoint; every action passes the Phase 4 policy and the run returns a typed success/failure result, with every failure carrying an explicit category (`business_outcome` / `recoverable` / `hard`) classified deterministically from config-driven patterns.
 4. **Safety (Phase 4, implemented)** — a JSON policy drives allowlists (origins, routes, action types), action classification (block / confirm / flag) and write-time redaction of secrets/financial PII, enforced without any LLM in the loop.
-5. **Human-in-the-loop (Phase 8, planned)** — blocked runs escalate to a human on the **same live browser session**; no session restarts.
+5. **Human-in-the-loop (Phase 8, implemented)** — blocked runs escalate to a human on the **same live browser session** via `replay --interactive` (`resume` / `finish` / `abort`); no session restarts.
 
 The target application is a deliberately realistic legacy banking console (**MemberServ**) living in this repository (`src/proxy_app/`), so the whole loop can be developed and demonstrated locally without external systems.
 
@@ -47,10 +47,10 @@ The target application is a deliberately realistic legacy banking console (**Mem
 | 5 | Discovery Loop (LLM) | Implemented (live run pending) |
 | 6 | Deterministic Replay Engine | Implemented (live run pending) |
 | 7 | Error Taxonomy | Completed |
-| 8 | Human-in-the-Loop Handoff | Pending |
+| 8 | Human-in-the-Loop Handoff | Completed |
 | 9 | Evidence, REPORT & Delivery | Pending |
 
-Current test suite: **381 tests passing** (pytest), with ruff (lint + format), mypy and bandit in green.
+Current test suite: **433 tests passing** (pytest), with ruff (lint + format), mypy and bandit in green.
 
 Roadmap and design decisions: [`docs/plans/0_plan_maestro.md`](docs/plans/0_plan_maestro.md).
 
@@ -96,7 +96,7 @@ Then edit `.env` if needed. **Never commit `.env`** — only `.env.example` (it 
 ### 3. Run the test suite
 
 ```bash
-uv run pytest        # 381 tests
+uv run pytest        # 433 tests
 ```
 
 ### 4. (Optional) Run the target application
@@ -313,6 +313,7 @@ uv run computer-use-automation-system replay \
   --artifact evidence/discovery/artifact.json \
   --input member_id=M-1001 \
   [--approved] \
+  [--interactive] \
   [--max-timeout-ms 30000]
 ```
 
@@ -323,9 +324,10 @@ Prerequisites: the proxy app running (`uv run python -m proxy_app.app`) and Chro
 | `--artifact` | Path to a valid Phase 3 artifact JSON (required) | — |
 | `--input` | `key=value` pair for `input_schema` (repeat, at least one; required) | — |
 | `--approved` | Allow `confirm`-verdict actions (e.g. `*/execute` routes) to run | off |
+| `--interactive` | Pause on handoff triggers and prompt the operator on stdin (Phase 8) | off |
 | `--max-timeout-ms` | Total time budget checked between steps (positive int) | no budget |
 
-**Exit codes**: `0` success, `10` blocked (policy), `11` needs_approval, `1` any other failure (input validation, step, checkpoint, output validation), `2` usage error or unreadable/invalid artifact (message on stderr, no stack trace).
+**Exit codes**: `0` success, `10` blocked (policy), `11` needs_approval (also `abort` at a needs-approval pause), `1` any other failure (input validation, step, checkpoint, output validation), `2` usage error, unreadable/invalid artifact or invalid config, `130` interrupted with Ctrl+C (message on stderr, no stack trace).
 
 A failure is always a typed `ReplayResult` with `error.stage` in `input_validation` / `step` / `policy` / `checkpoint` / `output_validation` plus a safe message — never a raw exception from the CLI. The policy audit trail (`decisions`: action, URL, verdict, reason) is present on both success and failure.
 
@@ -363,6 +365,24 @@ replay failure: stage=step step=1 hard step 1 (type) failed: element_not_found; 
 
 - Failure messages built from page state pass through the Phase 4 redaction layer before they are stored or printed.
 
+### Human-in-the-loop handoff (Phase 8)
+
+With `replay --interactive`, a stuck run **pauses instead of dying**: the CLI prints a redacted handoff package (trigger, stage, step, action, reason, observed-element count) and blocks on the operator — over the **same live driver** (`ControlState` flips `automation -> human`; no `quit()`, no new browser):
+
+```text
+handoff pause: trigger=needs_approval stage=policy step=6
+capability=disburse_loan v1.0.0 action=execute
+reason=Irreversible financial execution requires human approval
+observed elements=42
+decision [resume|finish|abort]:
+```
+
+- **Triggers** (closed set): `hard_failure`, `retries_exhausted`, `needs_approval`, `risky_step`. A policy `block` never escalates — it still stops the action outright.
+- **Decisions**: `resume` (retry the step / grant approval for that step only), `finish` (skip remaining steps, gate on the checkpoint alone — no false success), `abort` (typed failure at the trigger's stage; exit `11` for approval aborts, `1` otherwise). Empty/invalid input or EOF maps to `abort` — approval is never assumed.
+- At most **one handoff per step**: if `resume` hits the same signal again, the run ends in `failure` (no pause loops). While paused the engine makes **zero** driver calls (asserted by test), so the human can operate the same session.
+- Every intervention lands in `ReplayResult.handoff` (`HandoffRecord`: request, decision, redacted note, resumed snapshot) — serializable evidence for Phase 9.
+- Without the flag, behavior is byte-for-byte Phases 6/7 (`operator=None`), exit codes unchanged.
+
 ---
 
 ### Commands
@@ -370,7 +390,7 @@ replay failure: stage=step step=1 hard step 1 (type) failed: element_not_found; 
 | Command | What it does |
 |---------|--------------|
 | `uv sync` | Install/refresh dependencies from `uv.lock` |
-| `uv run pytest` | Run the full test suite (381 tests) |
+| `uv run pytest` | Run the full test suite (433 tests) |
 | `uv run ruff check src/ tests/` | Lint |
 | `uv run ruff format src/ tests/` | Format |
 | `uv run ruff format --check src/ tests/` | Verify formatting (CI) |
@@ -392,7 +412,7 @@ replay failure: stage=step step=1 hard step 1 (type) failed: element_not_found; 
 | `tests/test_proxy_validation.py` | 9 | Disbursement validation messages |
 | `tests/test_artifact_models.py` | 37 | Models, conditional rules, cross-invariants |
 | `tests/test_artifact_fixtures.py` | 6 | Fixtures, round-trip, schema anti-drift |
-| `tests/test_policy_models.py` | 16 | Policy/redaction models, strict validation |
+| `tests/test_policy_models.py` | 18 | Policy/redaction models, strict validation |
 | `tests/test_policy_load.py` | 6 | Policy JSON loading, error messages, JSON-only edits |
 | `tests/test_policy_evaluate.py` | 22 | Perimeter (origins/routes/actions), rules, verdicts |
 | `tests/test_policy_enforce.py` | 7 | Refusal semantics (block/confirm gates) |
@@ -412,9 +432,10 @@ replay failure: stage=step step=1 hard step 1 (type) failed: element_not_found; 
 | `tests/test_replay_inputs.py` | 10 | input_schema validation, `{{input.*}}` resolution |
 | `tests/test_replay_checkpoint.py` | 7 | visible/text_present/url_contains, fallback, timeout |
 | `tests/test_replay_engine.py` | 34 | Happy path, failure stages, policy gates, determinism, failure categories, retries/dismiss, anti-LLM static test |
-| `tests/test_replay_taxonomy.py` | 34 | `FailureCategory` contract, taxonomy config validation/loading, classifier precedence, config-driven reclassification |
-| `tests/test_cli_replay.py` | 20 | replay flags, exit codes 0/10/11/1/2, stderr diagnostics, category line, taxonomy config errors |
-| **Total** | **381** | |
+| `tests/test_replay_taxonomy.py` | 36 | `FailureCategory` contract, taxonomy config validation/loading, classifier precedence, config-driven reclassification |
+| `tests/test_replay_handoff.py` | 36 | Handoff contracts, 4 triggers, control state, operator decisions, handoff records, exports |
+| `tests/test_cli_replay.py` | 35 | replay flags (incl. `--interactive`), exit codes 0/10/11/1/2/130, stderr diagnostics, category line, taxonomy/policy config errors, prompt operator |
+| **Total** | **433** | |
 
 ### Quality gates
 
@@ -466,29 +487,30 @@ replay failure: stage=step step=1 hard step 1 (type) failed: element_not_found; 
 │   │   │   ├── models.py                  # PolicyConfig/Decision/RedactionConfig
 │   │   │   ├── policy.py                  # load_policy / evaluate / enforce
 │   │   │   └── redaction.py               # redact_text / filter / safe_write_text
-│   │   ├── replay/                        # Phases 6-7: replay engine + error taxonomy
-│   │   │   ├── __init__.py                # Public exports (replay, models, taxonomy)
-│   │   │   ├── models.py                  # ReplayResult / ReplayError / FailureCategory
+│   │   ├── replay/                        # Phases 6-8: replay engine + taxonomy + handoff
+│   │   │   ├── __init__.py                # Public exports (replay, models, taxonomy, handoff)
+│   │   │   ├── models.py                  # ReplayResult / ReplayError / FailureCategory / handoff contracts
+│   │   │   ├── handoff.py                 # Operator protocol (Phase 8)
 │   │   │   ├── inputs.py                  # input_schema validation + {{input.*}}
 │   │   │   ├── checkpoint.py              # visible / text_present / url_contains
 │   │   │   ├── taxonomy.py                # load_taxonomy + classify_failure (no LLM)
-│   │   │   └── engine.py                  # replay(): step loop + retries + enforce (no LLM)
-│   │   └── cli.py                         # Phase 5-7: discover + replay subcommands
+│   │   │   └── engine.py                  # replay(): step loop + retries + handoff pause (no LLM)
+│   │   └── cli.py                         # Phase 5-8: discover + replay subcommands
 │   └── proxy_app/                         # Phase 2: MemberServ target app
 │       ├── app.py                         # create_app() factory + main()
 │       ├── routes.py                      # Search/detail/disburse flows
 │       ├── data.py                        # Deterministic in-memory seed
 │       └── templates/                     # Legacy-style HTML (no test IDs)
-├── tests/                                 # Flat test suite (381 tests)
+├── tests/                                 # Flat test suite (433 tests)
 │   ├── fixtures/                          # Artifact fixtures
 │   │   ├── valid_artifact.json
 │   │   └── invalid/                       # bad_locator, bad_input_ref, ...
-│   ├── fakes.py                           # FakeLLMClient / ReplayFakeDriver (Phase 5/6)
+│   ├── fakes.py                           # FakeLLMClient / ReplayFakeDriver / FakeOperator (Phase 5/6/8)
 │   └── test_*.py
 ├── docs/
 │   ├── plans/                             # SDD specs and phase plans
 │   │   ├── 0_plan_maestro.md              # Master roadmap (source of truth)
-│   │   ├── fase_1/ ... fase_7/            # spec + implementation plan
+│   │   ├── fase_1/ ... fase_8/            # spec + implementation plan
 │   ├── schemas/artifact.schema.json       # Exported JSON Schema (derived)
 │   ├── refs/                              # Assignment A PDF, research notes
 │   ├── security/                          # Security audit reports
@@ -505,12 +527,14 @@ replay failure: stage=step step=1 hard step 1 (type) failed: element_not_found; 
 | Document | What it contains |
 |----------|------------------|
 | [`docs/plans/0_plan_maestro.md`](docs/plans/0_plan_maestro.md) | Master roadmap, design decisions, phase status |
-| [`docs/plans/fase_1/1.spec.md`](docs/plans/fase_1/1.spec.md) → `fase_7/7.spec.md` | Functional spec + acceptance criteria per phase |
-| [`docs/plans/fase_1/1.0_project_scaffold.md`](docs/plans/fase_1/1.0_project_scaffold.md) → `fase_7/7.0_error_taxonomy.md` | Step-by-step implementation plans (test-first) |
+| [`docs/plans/fase_1/1.spec.md`](docs/plans/fase_1/1.spec.md) → `fase_8/8.spec.md` | Functional spec + acceptance criteria per phase |
+| [`docs/plans/fase_1/1.0_project_scaffold.md`](docs/plans/fase_1/1.0_project_scaffold.md) → `fase_8/8.0_human_in_the_loop_handoff.md` | Step-by-step implementation plans (test-first) |
 | [`docs/schemas/artifact.schema.json`](docs/schemas/artifact.schema.json) | Machine-readable artifact contract |
 | [`docs/security/audit-2026-09-25-fase-4.md`](docs/security/audit-2026-09-25-fase-4.md) | Phase 4 security audit (findings + remediation) |
 | [`docs/security/audit-2026-09-25-fase-5.md`](docs/security/audit-2026-09-25-fase-5.md) | Phase 5 security audit (findings + remediation) |
-| [`docs/GUIA_USUARIO.md`](docs/GUIA_USUARIO.md) | End-user guide for MemberServ + the `discover` and `replay` commands (Spanish) |
+| [`docs/security/audit-2026-09-28-fase-7.md`](docs/security/audit-2026-09-28-fase-7.md) | Phase 7 security audit (findings + remediation) |
+| [`docs/security/audit-2026-09-29-fase-8.md`](docs/security/audit-2026-09-29-fase-8.md) | Phase 8 security audit (findings + remediation) |
+| [`docs/GUIA_USUARIO.md`](docs/GUIA_USUARIO.md) | End-user guide for MemberServ + the `discover`, `replay` and `--interactive` commands (Spanish) |
 | [`CLAUDE.md`](CLAUDE.md) | Repository conventions and agent rules |
 
 ---

@@ -21,10 +21,19 @@ from computer_use_automation_system.discovery.models import (
 )
 from computer_use_automation_system.discovery.runner import run_discovery
 from computer_use_automation_system.replay.engine import replay as run_replay
-from computer_use_automation_system.replay.models import ReplayResult, ReplayStage, ReplayStatus
+from computer_use_automation_system.replay.handoff import Operator
+from computer_use_automation_system.replay.models import (
+    HandoffDecision,
+    HandoffRequest,
+    OperatorResponse,
+    ReplayResult,
+    ReplayStage,
+    ReplayStatus,
+)
 from computer_use_automation_system.replay.taxonomy import load_taxonomy
-from computer_use_automation_system.safety.models import PolicyConfig
+from computer_use_automation_system.safety.models import PolicyConfig, RedactionConfig
 from computer_use_automation_system.safety.policy import load_policy
+from computer_use_automation_system.safety.redaction import redact_text
 
 EXIT_BY_STATUS: dict[RunStatus, int] = {
     RunStatus.GOAL_REACHED: 0,
@@ -94,7 +103,45 @@ def build_parser() -> argparse.ArgumentParser:
     )
     replay_cmd.add_argument("--approved", action="store_true")
     replay_cmd.add_argument("--max-timeout-ms", type=_positive_int, default=None)
+    replay_cmd.add_argument(
+        "--interactive",
+        action="store_true",
+        help="pause on handoff triggers and prompt an operator on stdin",
+    )
     return parser
+
+
+class PromptOperator:
+    """Interactive operator for `replay --interactive` (Phase 8, HU-6).
+
+    Prints the handoff package summary to stdout and reads one decision from
+    stdin (case-insensitive: resume / finish / abort). Invalid input or EOF
+    falls back to abort, which never assumes approval.
+    """
+
+    def intervene(self, request: HandoffRequest) -> OperatorResponse:
+        print(f"handoff pause: trigger={request.trigger} stage={request.stage.value}")
+        step = f" step={request.step_id}" if request.step_id is not None else ""
+        action = f" action={request.action}" if request.action is not None else ""
+        print(f"capability={request.capability}{step}{action}")
+        safe_reason = request.reason.replace("\r", "\\r").replace("\n", "\\n")
+        print(f"reason={safe_reason}")
+        print(f"observed elements={len(request.snapshot)}")
+        try:
+            raw = input("decision [resume|finish|abort]: ")
+        except (EOFError, KeyboardInterrupt, UnicodeDecodeError, OSError):
+            print("handoff: no input available; aborting")
+            return OperatorResponse(decision="abort")
+        choices: dict[str, HandoffDecision] = {
+            "resume": "resume",
+            "finish": "finish",
+            "abort": "abort",
+        }
+        picked = choices.get(raw.strip().lower())
+        if picked is None:
+            print("handoff: invalid decision; aborting")
+            return OperatorResponse(decision="abort")
+        return OperatorResponse(decision=picked)
 
 
 def _execute(config: DiscoveryConfig, policy: PolicyConfig, logger: StepLogger) -> DiscoveryResult:
@@ -116,6 +163,7 @@ def _execute_replay(
     *,
     approved: bool,
     max_timeout_ms: int | None,
+    operator: Operator | None = None,
 ) -> ReplayResult:
     """Wire the real browser (Chrome, no LLM). Tests monkeypatch this."""
     from computer_use_automation_system.discovery.selenium_driver import build_webdriver
@@ -129,6 +177,7 @@ def _execute_replay(
             policy,
             approved=approved,
             step_timeout_ms=max_timeout_ms,
+            operator=operator,
         )
     finally:
         driver.quit()
@@ -145,12 +194,13 @@ def _replay_exit_code(result: ReplayResult) -> int:
     return REPLAY_EXIT_BY_STAGE[error.stage]
 
 
-def _print_replay_result(result: ReplayResult) -> None:
+def _print_replay_result(result: ReplayResult, redaction: RedactionConfig) -> None:
     if result.status is ReplayStatus.SUCCESS:
         print(f"replay success: {result.capability_id} v{result.version}")
         print(f"steps_executed={result.steps_executed} elapsed_ms={result.elapsed_ms}")
         for key in sorted(result.outputs or {}):
-            print(f"output {key}={result.outputs[key]}")  # type: ignore[index]
+            value = redact_text(str(result.outputs[key]), redaction)  # type: ignore[index]
+            print(f"output {key}={value}")
         return
     error = result.error
     if error is None:  # pragma: no cover - model invariants forbid this
@@ -187,15 +237,37 @@ def _run_replay_command(namespace: argparse.Namespace) -> int:
         return 2
 
     inputs = dict(namespace.inputs)
-    policy = load_policy()
-    result = _execute_replay(
-        artifact,
-        inputs,
-        policy,
-        approved=namespace.approved,
-        max_timeout_ms=namespace.max_timeout_ms,
-    )
-    _print_replay_result(result)
+    try:
+        policy = load_policy()
+    except OSError as exc:
+        detail = exc.strerror or "read error"
+        print(f"replay: invalid policy config: {detail}", file=sys.stderr)
+        return 2
+    except ValidationError as exc:
+        # Never echo config values back (CWE-209): only field names.
+        fields = ", ".join(".".join(str(part) for part in err["loc"]) for err in exc.errors())
+        print(f"replay: invalid policy config (fields: {fields})", file=sys.stderr)
+        return 2
+    operator: Operator | None = PromptOperator() if namespace.interactive else None
+    if operator is None:
+        # Keep the legacy call shape byte-for-byte when --interactive is off.
+        result = _execute_replay(
+            artifact,
+            inputs,
+            policy,
+            approved=namespace.approved,
+            max_timeout_ms=namespace.max_timeout_ms,
+        )
+    else:
+        result = _execute_replay(
+            artifact,
+            inputs,
+            policy,
+            approved=namespace.approved,
+            max_timeout_ms=namespace.max_timeout_ms,
+            operator=operator,
+        )
+    _print_replay_result(result, policy.redaction)
     return _replay_exit_code(result)
 
 
@@ -210,23 +282,27 @@ def main(argv: list[str] | None = None) -> int:
     load_dotenv()
     parser = build_parser()
     namespace = parser.parse_args(args)
-    if namespace.command == "replay":
-        return _run_replay_command(namespace)
-    if namespace.command != "discover":
-        parser.error("the following arguments are required: discover")
+    try:
+        if namespace.command == "replay":
+            return _run_replay_command(namespace)
+        if namespace.command != "discover":
+            parser.error("the following arguments are required: discover")
 
-    overrides: dict = {}
-    if namespace.artifact_out:
-        overrides["artifact_out"] = Path(namespace.artifact_out)
-    if namespace.log_out:
-        overrides["log_out"] = Path(namespace.log_out)
-    config = DiscoveryConfig(
-        goal=namespace.goal,
-        entry_url=namespace.entry,
-        max_steps=namespace.max_steps,
-        **overrides,
-    )
-    policy = load_policy()
-    logger = StepLogger(config.log_out, policy.redaction)
-    result = _execute(config, policy, logger)
-    return EXIT_BY_STATUS[result.status]
+        overrides: dict = {}
+        if namespace.artifact_out:
+            overrides["artifact_out"] = Path(namespace.artifact_out)
+        if namespace.log_out:
+            overrides["log_out"] = Path(namespace.log_out)
+        config = DiscoveryConfig(
+            goal=namespace.goal,
+            entry_url=namespace.entry,
+            max_steps=namespace.max_steps,
+            **overrides,
+        )
+        policy = load_policy()
+        logger = StepLogger(config.log_out, policy.redaction)
+        result = _execute(config, policy, logger)
+        return EXIT_BY_STATUS[result.status]
+    except KeyboardInterrupt:
+        print("interrupted", file=sys.stderr)
+        return 130

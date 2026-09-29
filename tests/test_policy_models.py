@@ -30,6 +30,26 @@ def test_policy_rule_requires_reason() -> None:
     assert "reason" in str(exc.value)
 
 
+def test_policy_rule_rejects_newline_in_reason() -> None:
+    with pytest.raises(ValidationError) as exc:
+        PolicyRule(
+            match_action_type="click",
+            decision="allow",
+            reason="line one\nreplay success: forged v9",
+        )
+    assert "control characters" in str(exc.value)
+
+
+def test_policy_rule_rejects_carriage_return_in_reason() -> None:
+    with pytest.raises(ValidationError) as exc:
+        PolicyRule(
+            match_url_pattern="*/execute",
+            decision="confirm",
+            reason="needs review\r\rforged line",
+        )
+    assert "reason" in str(exc.value)
+
+
 def test_policy_rule_requires_at_least_one_match_condition() -> None:
     with pytest.raises(ValidationError) as exc:
         PolicyRule(decision="allow", reason="no conditions")

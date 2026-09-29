@@ -5,6 +5,7 @@ import pytest
 
 from computer_use_automation_system import cli
 from computer_use_automation_system.replay.models import (
+    HandoffRequest,
     ReplayError,
     ReplayResult,
     ReplayStage,
@@ -260,3 +261,146 @@ def test_taxonomy_config_error_does_not_echo_values(monkeypatch, capsys) -> None
     assert "SENSITIVE-PII-VALUE" not in captured.err
     assert "patterns" in captured.err
     assert "Traceback" not in captured.err
+
+
+# --- Phase 8, HU-6: --interactive flag and the prompt operator --------------
+
+
+def test_interactive_flag_passes_a_prompt_operator_to_the_seam(monkeypatch) -> None:
+    captured: dict = {}
+
+    def fake_execute(artifact, inputs, policy, *, approved, max_timeout_ms, operator=None):
+        captured["operator"] = operator
+        return _success()
+
+    monkeypatch.setattr(cli, "_execute_replay", fake_execute)
+    code = _run(["--artifact", FIXTURE, "--input", "member_id=M-1", "--interactive"])
+    assert code == 0
+    assert isinstance(captured["operator"], cli.PromptOperator)
+
+
+def test_without_interactive_flag_the_seam_signature_is_untouched(monkeypatch) -> None:
+    def fake_execute(artifact, inputs, policy, *, approved, max_timeout_ms):
+        return _success()
+
+    monkeypatch.setattr(cli, "_execute_replay", fake_execute)
+    assert _run(["--artifact", FIXTURE, "--input", "member_id=M-1"]) == 0
+
+
+def _pause_request() -> HandoffRequest:
+    return HandoffRequest(
+        trigger="hard_failure",
+        stage=ReplayStage.STEP,
+        step_id=2,
+        action="click",
+        reason="step 2 (click) failed: element_not_found; classified hard",
+        capability="lookup_member_balance v1.0.0",
+        description="MemberServ console flow",
+        snapshot=[{"tag": "div", "id": "main", "text": "MemberServ"}],
+    )
+
+
+@pytest.mark.parametrize(
+    ("answer", "expected"),
+    [
+        ("resume", "resume"),
+        ("FINISH", "finish"),
+        ("  abort ", "abort"),
+        ("", "abort"),
+        ("yes", "abort"),
+    ],
+)
+def test_prompt_operator_reads_decisions_case_insensitively(
+    monkeypatch, capsys, answer, expected
+) -> None:
+    operator = cli.PromptOperator()
+    monkeypatch.setattr("builtins.input", lambda prompt="": answer)
+    response = operator.intervene(_pause_request())
+    assert response.decision == expected
+    out = capsys.readouterr().out
+    assert "hard_failure" in out
+    assert "lookup_member_balance v1.0.0" in out
+    assert "element_not_found" in out
+    assert not any(ord(ch) > 127 for ch in out)
+
+
+def test_prompt_operator_aborts_on_eof(monkeypatch) -> None:
+    def raise_eof(prompt=""):
+        raise EOFError
+
+    monkeypatch.setattr("builtins.input", raise_eof)
+    operator = cli.PromptOperator()
+    assert operator.intervene(_pause_request()).decision == "abort"
+
+
+# --- Phase 8 security audit fixes (SEC-801, SEC-802, SEC-803) ----------------
+
+
+def test_prompt_operator_neutralizes_control_characters_in_reason(monkeypatch, capsys) -> None:
+    forged = _pause_request().model_copy(
+        update={"reason": "needs review\nreplay success: forged v9"}
+    )
+    monkeypatch.setattr("builtins.input", lambda prompt="": "abort")
+    response = cli.PromptOperator().intervene(forged)
+    assert response.decision == "abort"
+    out = capsys.readouterr().out
+    assert "reason=needs review\\nreplay success: forged v9" in out
+    assert not any(line.startswith("replay success") for line in out.splitlines())
+
+
+def test_success_outputs_are_redacted_at_print_time(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(cli, "_execute_replay", lambda *a, **k: _success())
+    code = _run(["--artifact", FIXTURE, "--input", "member_id=M-1001"])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "output savings_balance=[REDACTED_AMOUNT]" in out
+    assert "15200.00" not in out
+
+
+def test_prompt_operator_aborts_on_undecodable_stdin(monkeypatch) -> None:
+    def raise_decode(prompt=""):
+        raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+
+    monkeypatch.setattr("builtins.input", raise_decode)
+    assert cli.PromptOperator().intervene(_pause_request()).decision == "abort"
+
+
+def test_missing_policy_file_exits_2_with_stderr(monkeypatch, capsys) -> None:
+    def missing_policy():
+        raise OSError("config/policy.json not found")
+
+    monkeypatch.setattr(cli, "load_policy", missing_policy)
+    code = _run(["--artifact", FIXTURE, "--input", "member_id=M-1001"])
+    assert code == 2
+    captured = capsys.readouterr()
+    assert "policy" in captured.err.lower()
+    assert "Traceback" not in captured.err
+    assert captured.out == ""
+
+
+def test_policy_config_error_does_not_echo_values(monkeypatch, capsys) -> None:
+    from computer_use_automation_system.safety.models import PolicyConfig
+
+    def broken_policy():
+        return PolicyConfig.model_validate({"allowed_origins": ["http://SENSITIVE-VALUE.example"]})
+
+    monkeypatch.setattr(cli, "load_policy", broken_policy)
+    code = _run(["--artifact", FIXTURE, "--input", "member_id=M-1001"])
+    assert code == 2
+    captured = capsys.readouterr()
+    assert "policy" in captured.err.lower()
+    assert "SENSITIVE-VALUE" not in captured.err
+    assert "allowed_routes" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_keyboard_interrupt_returns_130(monkeypatch, capsys) -> None:
+    def interrupted(*args, **kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli, "_execute_replay", interrupted)
+    code = _run(["--artifact", FIXTURE, "--input", "member_id=M-1001"])
+    assert code == 130
+    captured = capsys.readouterr()
+    assert "Traceback" not in captured.err
+    assert "interrupted" in captured.err

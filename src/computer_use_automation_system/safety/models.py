@@ -22,6 +22,10 @@ class DecisionKind(StrEnum):
     BLOCK = "block"
 
 
+def _has_control_chars(value: str) -> bool:
+    return any(ord(ch) < 32 for ch in value)
+
+
 class PolicyRule(BaseModel):
     """One classification rule. Rules are evaluated in file order and the
     first match wins. Every rule carries an auditable ``reason``."""
@@ -32,6 +36,13 @@ class PolicyRule(BaseModel):
     match_url_pattern: str | None = None
     decision: DecisionKind
     reason: str = Field(min_length=1)
+
+    @field_validator("reason")
+    @classmethod
+    def _reason_must_not_contain_control_chars(cls, value: str) -> str:
+        if _has_control_chars(value):
+            raise ValueError("reason must not contain control characters")
+        return value
 
     @model_validator(mode="after")
     def _at_least_one_condition(self) -> "PolicyRule":

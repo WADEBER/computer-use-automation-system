@@ -5,6 +5,11 @@ Invariants enforced by the models themselves:
 - ``status == failure``  <=> ``error`` is set and ``outputs`` is None.
 - ``policy_kind`` only on ``stage == "policy"``; input/output validation
   failures never carry a ``step_id``.
+- Phase 8 (handoff, HU-2/HU-5): the pause package and its evidence record
+  are strict models (``extra="forbid"``, no timestamps); confirm triggers
+  pause at ``stage == "policy"`` (so ``abort`` keeps exit 11), failures at
+  ``step``/``checkpoint`` (exit 1); ``ReplayResult.handoff`` is additive
+  with correlated indexes starting at 0.
 """
 
 from enum import StrEnum
@@ -79,6 +84,89 @@ class DecisionRecord(BaseModel):
     reason: str = Field(min_length=1)
 
 
+HandoffTrigger = Literal[
+    "hard_failure",
+    "retries_exhausted",
+    "needs_approval",
+    "risky_step",
+]
+
+HandoffDecision = Literal["resume", "finish", "abort"]
+
+ControlState = Literal["automation", "human"]
+
+
+class HandoffRequest(BaseModel):
+    """Intervention package handed to the operator (spec Phase 8, HU-2).
+
+    Strict (``extra="forbid"``) and timestamp-free for determinism; text
+    fields arrive already redacted by the engine. Confirm signals
+    (``needs_approval``/``risky_step``) pause at the policy stage so an
+    ``abort`` maps to exit 11; failures pause at step/checkpoint (exit 1).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    trigger: HandoffTrigger
+    stage: ReplayStage
+    step_id: int | None = Field(default=None, ge=1)
+    action: ActionType | None = None
+    reason: str = Field(min_length=1)
+    capability: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    snapshot: list[dict[str, object]]
+    screenshot: str | None = None
+
+    @model_validator(mode="after")
+    def _stage_rules(self) -> "HandoffRequest":
+        if self.stage not in (
+            ReplayStage.STEP,
+            ReplayStage.POLICY,
+            ReplayStage.CHECKPOINT,
+        ):
+            raise ValueError(f"stage '{self.stage.value}' can not pause for handoff")
+        confirm = self.trigger in ("needs_approval", "risky_step")
+        if confirm and self.stage is not ReplayStage.POLICY:
+            raise ValueError(f"trigger '{self.trigger}' requires stage 'policy'")
+        if not confirm and self.stage is ReplayStage.POLICY:
+            raise ValueError("stage 'policy' requires a confirm trigger")
+        if self.trigger == "retries_exhausted" and self.stage is not ReplayStage.STEP:
+            raise ValueError("'retries_exhausted' pauses at stage 'step'")
+        if self.stage in (ReplayStage.STEP, ReplayStage.POLICY) and self.step_id is None:
+            raise ValueError(f"stage '{self.stage.value}' requires a 'step_id'")
+        return self
+
+
+class HandoffRecord(BaseModel):
+    """Evidence of one operator intervention (spec Phase 8, HU-5)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    index: int = Field(ge=0)
+    request: HandoffRequest
+    decision: HandoffDecision
+    note: str | None = Field(default=None, min_length=1)
+    resumed_snapshot: list[dict[str, object]] | None = None
+
+    @model_validator(mode="after")
+    def _decision_rules(self) -> "HandoffRecord":
+        if self.decision == "abort" and self.resumed_snapshot is not None:
+            raise ValueError("'abort' must not declare 'resumed_snapshot'")
+        if self.decision != "abort" and self.resumed_snapshot is None:
+            raise ValueError(f"'{self.decision}' requires 'resumed_snapshot'")
+        return self
+
+
+class OperatorResponse(BaseModel):
+    """What the operator answers to a pause: a decision plus an optional
+    note (spec Phase 8, HU-6); the note is redacted before it is recorded."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    decision: HandoffDecision
+    note: str | None = Field(default=None, min_length=1)
+
+
 class ReplayResult(BaseModel):
     """Outcome of a full deterministic replay run."""
 
@@ -91,7 +179,15 @@ class ReplayResult(BaseModel):
     steps_executed: int = Field(default=0, ge=0)
     elapsed_ms: int = Field(default=0, ge=0)
     decisions: list[DecisionRecord] = Field(default_factory=list)
+    handoff: list[HandoffRecord] = Field(default_factory=list)
     error: ReplayError | None = None
+
+    @model_validator(mode="after")
+    def _handoff_indexes(self) -> "ReplayResult":
+        for position, record in enumerate(self.handoff):
+            if record.index != position:
+                raise ValueError("handoff records must use correlated indexes starting at 0")
+        return self
 
     @model_validator(mode="after")
     def _status_invariants(self) -> "ReplayResult":

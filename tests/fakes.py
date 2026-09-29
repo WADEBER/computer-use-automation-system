@@ -6,6 +6,10 @@ from urllib.parse import urljoin
 from computer_use_automation_system.artifact.models import Locator, LocatorType
 from computer_use_automation_system.discovery.act import DriverActionError
 from computer_use_automation_system.discovery.models import ObservedElement
+from computer_use_automation_system.replay.models import (
+    HandoffRequest,
+    OperatorResponse,
+)
 
 
 class FakeLLMClient:
@@ -67,14 +71,24 @@ class ReplayFakeDriver:
         self.pages = pages
         self.url = start_url
         self.calls: list[tuple] = []
+        self.human_control = False
+
+    def _guard(self) -> None:
+        """Raise while the human owns control (spec Phase 8, HU-3): the
+        engine must not touch the session during a handoff."""
+        if self.human_control:
+            raise AssertionError("driver touched while human has control")
 
     def observe_raw(self) -> list[dict]:
+        self._guard()
         return [dict(element) for element in self.pages.get(self.url, [])]
 
     def current_url(self) -> str:
+        self._guard()
         return self.url
 
     def navigate(self, url: str) -> None:
+        self._guard()
         self.calls.append(("navigate", url))
         self.url = url
 
@@ -87,23 +101,62 @@ class ReplayFakeDriver:
         raise DriverActionError("element_not_found")
 
     def click(self, element: ObservedElement) -> None:
+        self._guard()
         target = self._find(element)
         self.calls.append(("click", target.get("id") or target.get("text"), self.url))
         if target.get("href"):
             self.url = urljoin(self.url, target["href"])
 
     def type_text(self, element: ObservedElement, text: str) -> None:
+        self._guard()
         target = self._find(element)
         target["value"] = text
         self.calls.append(("type", target.get("id"), text))
 
     def select_option(self, element: ObservedElement, option: str) -> None:
+        self._guard()
         target = self._find(element)
         self.calls.append(("select", target.get("id"), option))
 
     def extract_text(self, element: ObservedElement) -> str:
+        self._guard()
         target = self._find(element)
         return (target.get("text") or "").strip() or (target.get("value") or "")
 
     def quit(self) -> None:
+        self._guard()
         self.calls.append(("quit",))
+
+
+class FakeOperator:
+    """Scripted operator (spec Phase 8, HU-6): pops queued `OperatorResponse`
+    values or delegates to a handler, mirrors the control transfer on the
+    fake driver (`human_control` True while it decides) and records the call
+    count seen at entry/exit so tests can prove the engine never touches the
+    session during the wait."""
+
+    def __init__(
+        self,
+        driver: ReplayFakeDriver,
+        responses: list[OperatorResponse] | None = None,
+        handler: Callable[[HandoffRequest], OperatorResponse] | None = None,
+    ) -> None:
+        self.driver = driver
+        self.responses = list(responses or [])
+        self.handler = handler
+        self.requests: list[HandoffRequest] = []
+        self.calls_during_wait: list[tuple[int, int]] = []
+
+    def intervene(self, request: HandoffRequest) -> OperatorResponse:
+        self.requests.append(request)
+        self.driver.human_control = True
+        entered = len(self.driver.calls)
+        try:
+            if self.handler is not None:
+                return self.handler(request)
+            if not self.responses:
+                raise AssertionError("FakeOperator ran out of scripted responses")
+            return self.responses.pop(0)
+        finally:
+            self.calls_during_wait.append((entered, len(self.driver.calls)))
+            self.driver.human_control = False

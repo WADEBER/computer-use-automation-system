@@ -1,9 +1,17 @@
-"""Deterministic replay engine (Phases 6-7): executes a typed artifact
-without invoking any LLM, with failure taxonomy. Public exports."""
+"""Deterministic replay engine (Phases 6-8): executes a typed artifact
+without invoking any LLM, with failure taxonomy and human-in-the-loop
+handoff. Public exports."""
 
+from computer_use_automation_system.replay.handoff import Operator
 from computer_use_automation_system.replay.models import (
+    ControlState,
     DecisionRecord,
     FailureCategory,
+    HandoffDecision,
+    HandoffRecord,
+    HandoffRequest,
+    HandoffTrigger,
+    OperatorResponse,
     ReplayError,
     ReplayResult,
     ReplayStage,
@@ -18,8 +26,15 @@ from computer_use_automation_system.replay.taxonomy import (
 
 __all__ = [
     "Classification",
+    "ControlState",
     "DecisionRecord",
     "FailureCategory",
+    "HandoffDecision",
+    "HandoffRecord",
+    "HandoffRequest",
+    "HandoffTrigger",
+    "Operator",
+    "OperatorResponse",
     "ReplayError",
     "ReplayResult",
     "ReplayStage",

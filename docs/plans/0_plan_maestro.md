@@ -63,7 +63,7 @@ docs/plans/
 | 5 | Discovery Loop (LLM) | `fase_5/5.spec.md` | Completada |
 | 6 | Deterministic Replay Engine | `fase_6/6.spec.md` | Completada |
 | 7 | Error Taxonomy | `fase_7/7.spec.md` | Completada |
-| 8 | Human-in-the-Loop Handoff | Pendiente | Pendiente |
+| 8 | Human-in-the-Loop Handoff | `fase_8/8.spec.md` | Completada |
 | 9 | Evidence, REPORT & Delivery | Pendiente | Pendiente |
 
 ---
@@ -174,16 +174,17 @@ docs/plans/
 ---
 
 ## Fase 8: Human-in-the-Loop Handoff
-- [ ] Detección de stuck (reintentos fallidos, dead-end) y de step risky/irreversible
-- [ ] Intervention request con contexto: meta/capability, step actual, screenshot o snapshot, motivo
-- [ ] Pausa de la automatización en la **misma sesión viva** (antipatrón prohibido: navegador nuevo)
-- [ ] Bandera/clase de control: `automation` vs `human` (sin carreras)
-- [ ] Interfaz de operador **mínima/mock deliberada** (scope note Assignment §3.6) pero mecanismo de transferencia real
-- [ ] Registro de acciones humanas + evidencia del handoff
-- [ ] Señal de resume → el run continúa o completa
-- [ ] `/8-auditar` de la fase
+- [x] Detección de stuck (reintentos fallidos, dead-end) y de step risky/irreversible
+- [x] Intervention request con contexto: meta/capability, step actual, screenshot o snapshot, motivo
+- [x] Pausa de la automatización en la **misma sesión viva** (antipatrón prohibido: navegador nuevo)
+- [x] Bandera/clase de control: `automation` vs `human` (sin carreras)
+- [x] Interfaz de operador **mínima/mock deliberada** (scope note Assignment §3.6) pero mecanismo de transferencia real
+- [x] Registro de acciones humanas + evidencia del handoff
+- [x] Señal de resume → el run continúa o completa
+- [x] `/8-auditar` de la fase
 
 **Cierre:** demo pausa → humano controla la misma sesión → retoma; evidencia persistida.
+**Cerrada:** 2026-09-29 — 433 tests verdes; ruff/format/mypy/bandit en verde; auditoría `docs/security/audit-2026-09-29-fase-8.md` (0 Critical/High; SEC-801/802/803 corregidos, SEC-804/805 en backlog); registros `ReplayResult.handoff` serializables (la persistencia en `evidence/` es de Fase 9); spec + plan en `fase_8/`.
 
 ---
 
