@@ -1,3 +1,4 @@
+import inspect
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,7 @@ from selenium.webdriver.common.by import By
 from computer_use_automation_system.artifact.models import Locator, LocatorType
 from computer_use_automation_system.discovery.selenium_driver import (
     OBSERVE_SCRIPT,
+    SeleniumDriver,
     locator_to_by,
     normalize_script_result,
     translate_driver_error,
@@ -70,6 +72,29 @@ def test_observe_script_targets_interactive_elements_only() -> None:
     assert "querySelectorAll" in OBSERVE_SCRIPT
     for selector in ("input", "button", "select", "textarea", "a["):
         assert selector in OBSERVE_SCRIPT
+
+
+def test_observe_script_exports_build_snapshot_fields() -> None:
+    """fix-1: build_snapshot reads id/name_attr/classes/text/label, so the
+    real script must export them (otherwise every locator degrades to a bare
+    tag selector and clicks resolve to the first matching element)."""
+    for fragment in (
+        "label:",
+        "id: (el.id",
+        "name_attr:",
+        "classes:",
+        "text:",
+    ):
+        assert fragment in OBSERVE_SCRIPT
+
+
+def test_page_text_reads_bounded_body_innertext() -> None:
+    """fix-4: replay classification needs static page messages that
+    observe_raw (interactive-only) never collects."""
+    source = inspect.getsource(SeleniumDriver.page_text)
+    assert "innerText" in source
+    assert "execute_script" in source
+    assert "20000" in source  # bounded
 
 
 def test_no_time_sleep_in_discovery_sources() -> None:

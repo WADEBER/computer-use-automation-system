@@ -62,8 +62,9 @@ def _build_locators(
     elif classes:
         css = f"{tag}.{classes[0]}"
     else:
-        css = tag
-    locators.append(Locator(type=LocatorType.CSS, value=css))
+        css = ""  # bare-tag css matches any occurrence: not discriminating (fix-3)
+    if css:
+        locators.append(Locator(type=LocatorType.CSS, value=css))
     if role:
         locators.append(Locator(type=LocatorType.ROLE, value=f"{role}::{name}" if name else role))
     if text:

@@ -1,0 +1,125 @@
+{
+  "capability_id": "the_input_field_named_new_loan_disbursement_is_visible_on_th",
+  "version": "1.0.0",
+  "description": "The input field named New Loan Disbursement is visible on the member detail page for M-1001 in the MemberServ console at http://127.0.0.1:5000/. To get there: type M-1001 into input q, click element Search, then click link View Detail",
+  "target_app": {
+    "name": "127.0.0.1:5000",
+    "entry_url": "http://127.0.0.1:5000/"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "q": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "q"
+    ]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "summary": {
+        "type": "string"
+      }
+    },
+    "required": []
+  },
+  "steps": [
+    {
+      "step_id": 1,
+      "action_type": "navigate",
+      "description": "Initial page navigation to the MemberServ console",
+      "locators": [
+        {
+          "type": "css",
+          "value": "body"
+        }
+      ],
+      "value": "http://127.0.0.1:5000/",
+      "output_key": null,
+      "timeout_ms": 5000
+    },
+    {
+      "step_id": 2,
+      "action_type": "type",
+      "description": "Input the member ID 'M-1001' into the search field.",
+      "locators": [
+        {
+          "type": "id",
+          "value": "q"
+        },
+        {
+          "type": "css",
+          "value": "input#q"
+        },
+        {
+          "type": "role",
+          "value": "textbox::q"
+        },
+        {
+          "type": "xpath",
+          "value": "//input[@id=\"q\"]"
+        }
+      ],
+      "value": "{{input.q}}",
+      "output_key": null,
+      "timeout_ms": 5000
+    },
+    {
+      "step_id": 3,
+      "action_type": "click",
+      "description": "Initiate search by clicking the Search button.",
+      "locators": [
+        {
+          "type": "css",
+          "value": "input.btn"
+        },
+        {
+          "type": "role",
+          "value": "textbox::Search"
+        },
+        {
+          "type": "xpath",
+          "value": "//input"
+        }
+      ],
+      "value": null,
+      "output_key": null,
+      "timeout_ms": 5000
+    },
+    {
+      "step_id": 4,
+      "action_type": "click",
+      "description": "Navigate to the member detail page for M-1001",
+      "locators": [
+        {
+          "type": "role",
+          "value": "link::View Detail"
+        },
+        {
+          "type": "text",
+          "value": "View Detail"
+        },
+        {
+          "type": "xpath",
+          "value": "//a[contains(normalize-space(.), \"View Detail\")]"
+        }
+      ],
+      "value": null,
+      "output_key": null,
+      "timeout_ms": 5000
+    }
+  ],
+  "checkpoint": {
+    "description": "Goal reached: The input field named New Loan Disbursement is visible on the member detail page for M-1001 in the MemberServ console at http://127.0.0.1:5000/. To get there: type M-1001 into input q, click element Search, then click link View Detail",
+    "locators": [
+      {
+        "type": "css",
+        "value": "body"
+      }
+    ],
+    "expected_condition": "visible"
+  }
+}

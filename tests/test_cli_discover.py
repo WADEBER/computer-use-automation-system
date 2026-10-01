@@ -65,6 +65,49 @@ def test_non_positive_max_steps_exits_2() -> None:
     assert exc.value.code == 2
 
 
+def test_non_positive_total_timeout_exits_2() -> None:
+    with pytest.raises(SystemExit) as exc:
+        cli.main(
+            [
+                "discover",
+                "--goal",
+                "g",
+                "--entry",
+                "http://127.0.0.1:5000/",
+                "--total-timeout-ms",
+                "0",
+            ]
+        )
+    assert exc.value.code == 2
+
+
+def test_total_timeout_flag_reaches_the_discovery_config(monkeypatch, tmp_path) -> None:
+    captured: dict[str, DiscoveryConfig] = {}
+
+    def fake_execute(config, policy, logger):
+        captured["config"] = config
+        return DiscoveryResult(status=RunStatus.TIMEOUT, steps=[])
+
+    monkeypatch.setattr(cli, "_execute", fake_execute)
+    code = cli.main(
+        [
+            "discover",
+            "--goal",
+            "g",
+            "--entry",
+            "http://127.0.0.1:5000/",
+            "--total-timeout-ms",
+            "600000",
+            "--artifact-out",
+            str(tmp_path / "a.json"),
+            "--log-out",
+            str(tmp_path / "s.jsonl"),
+        ]
+    )
+    assert code == 13
+    assert captured["config"].total_timeout_ms == 600000
+
+
 def test_each_status_maps_to_its_exit_code(monkeypatch, tmp_path) -> None:
     for status, expected in EXIT_BY_STATUS.items():
         artifact = _minimal_artifact() if status is RunStatus.GOAL_REACHED else None

@@ -139,7 +139,9 @@ def test_goal_reached_writes_valid_artifact_and_evidence(tmp_path) -> None:
     Artifact.model_validate(raw)
     assert result.log_path is not None and Path(result.log_path).exists()
     log_lines = Path(result.log_path).read_text(encoding="utf-8").splitlines()
-    assert len(log_lines) == 2
+    assert len(log_lines) == 3  # 2 steps + final summary event
+    summary = json.loads(log_lines[-1])
+    assert summary == {"event": "summary", "status": "goal_reached", "steps": 2}
     assert len(result.steps) == 2
     assert all(step.policy_decision is not None for step in result.steps)
     assert driver.calls[0][0] == "click"

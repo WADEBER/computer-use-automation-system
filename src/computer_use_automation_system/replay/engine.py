@@ -96,6 +96,7 @@ def replay(
     clock: Callable[[], float] = time.monotonic,
     taxonomy: TaxonomyConfig | None = None,
     operator: Operator | None = None,
+    events: Callable[[dict[str, object]], None] | None = None,
 ) -> ReplayResult:
     """Replay `artifact` with `inputs` against `driver`, enforcing `policy`.
 
@@ -104,6 +105,10 @@ def replay(
     `taxonomy=None` loads `config/taxonomy.json` (same pattern as policy).
     `operator=None` keeps the Phase 6/7 behavior bit for bit; an injected
     operator pauses on the four handoff triggers over the same session.
+    `events=None` keeps the legacy call shape; an injected callable receives
+    the timeline (`policy_decision`, `step`, `checkpoint`, `handoff`,
+    `failure`) for the Phase 9 structured log -- redaction happens in the
+    writer, never here.
     """
     if taxonomy is None:
         taxonomy = load_taxonomy()
@@ -115,6 +120,25 @@ def replay(
     checkpoint_handed_off = False
     finished_by_operator = False
     approved_for_step = False
+
+    def _emit(event: str, **fields: object) -> None:
+        if events is None:
+            return
+        payload: dict[str, object] = {"event": event}
+        payload.update(fields)
+        events(payload)
+
+    def _record(action_type: ActionType, url: str, decision: DecisionKind, reason: str) -> None:
+        decisions.append(
+            DecisionRecord(action_type=action_type, url=url, decision=decision, reason=reason)
+        )
+        _emit(
+            "policy_decision",
+            action_type=action_type.value,
+            url=url,
+            decision=decision.value,
+            reason=reason,
+        )
 
     def _finish(
         status: ReplayStatus,
@@ -144,14 +168,40 @@ def replay(
         category: FailureCategory | None = None,
         **kwargs,
     ) -> ReplayResult:
+        error = ReplayError(stage=stage, message=message, failure_category=category, **kwargs)
+        _emit(
+            "failure",
+            stage=error.stage.value,
+            step_id=error.step_id,
+            policy_kind=error.policy_kind,
+            failure_category=error.failure_category,
+            message=error.message,
+        )
         return _finish(
             ReplayStatus.FAILURE,
             steps_executed=steps,
-            error=ReplayError(stage=stage, message=message, failure_category=category, **kwargs),
+            error=error,
         )
 
     def _classify(code: str | None):
-        return classify_failure(code, driver.observe_raw(), taxonomy)
+        """Classify from the interactive DOM plus, when the driver exposes it,
+        the full page text (fix-4): static messages such as "No records found"
+        live outside interactive elements, so observe_raw alone would demote a
+        business outcome to `hard`. Optional capability via getattr, same
+        pattern as `_screenshot`."""
+        elements: list[dict[str, object]] = list(driver.observe_raw())
+        try:
+            page_text = getattr(driver, "page_text", None)
+        except Exception:
+            page_text = None
+        if callable(page_text):
+            try:
+                body = str(page_text() or "")[:20000]
+            except Exception:
+                body = ""
+            if body:
+                elements = [*elements, {"text": body}]
+        return classify_failure(code, elements, taxonomy)
 
     def _snapshot() -> list[dict[str, object]]:
         """Redacted DOM snapshot; the engine only observes while it owns control."""
@@ -202,18 +252,23 @@ def replay(
             response = op.intervene(request)
         finally:
             control = "automation"
-        handoff_records.append(
-            HandoffRecord(
-                index=len(handoff_records),
-                request=request,
-                decision=response.decision,
-                note=(
-                    redact_text(response.note, policy.redaction)
-                    if response.note is not None
-                    else None
-                ),
-                resumed_snapshot=None if response.decision == "abort" else _snapshot(),
-            )
+        record = HandoffRecord(
+            index=len(handoff_records),
+            request=request,
+            decision=response.decision,
+            note=(
+                redact_text(response.note, policy.redaction) if response.note is not None else None
+            ),
+            resumed_snapshot=None if response.decision == "abort" else _snapshot(),
+        )
+        handoff_records.append(record)
+        _emit(
+            "handoff",
+            index=record.index,
+            trigger=record.request.trigger,
+            stage=record.request.stage.value,
+            step_id=record.request.step_id,
+            decision=record.decision,
         )
         return response.decision
 
@@ -233,14 +288,7 @@ def replay(
                 )
             except PolicyViolation as exc:
                 decision = exc.decision
-                decisions.append(
-                    DecisionRecord(
-                        action_type=ActionType.CLICK,
-                        url=url,
-                        decision=decision.decision,
-                        reason=decision.reason,
-                    )
-                )
+                _record(ActionType.CLICK, url, decision.decision, decision.reason)
                 if (
                     decision.decision is DecisionKind.CONFIRM
                     and operator is not None
@@ -259,14 +307,7 @@ def replay(
                         continue
                     return answer
                 return None
-            decisions.append(
-                DecisionRecord(
-                    action_type=ActionType.CLICK,
-                    url=url,
-                    decision=decision.decision,
-                    reason=decision.reason,
-                )
-            )
+            _record(ActionType.CLICK, url, decision.decision, decision.reason)
             dismiss_element = ObservedElement(
                 ref=step.step_id,
                 tag="button",
@@ -383,14 +424,7 @@ def replay(
                 )
             except PolicyViolation as exc:
                 decision = exc.decision
-                decisions.append(
-                    DecisionRecord(
-                        action_type=step.action_type,
-                        url=target_url,
-                        decision=decision.decision,
-                        reason=decision.reason,
-                    )
-                )
+                _record(step.action_type, target_url, decision.decision, decision.reason)
                 kind = "blocked" if decision.decision is DecisionKind.BLOCK else "needs_approval"
                 if (
                     operator is not None
@@ -425,14 +459,7 @@ def replay(
                     step_id=step.step_id,
                     policy_kind=kind,
                 )
-            decisions.append(
-                DecisionRecord(
-                    action_type=step.action_type,
-                    url=target_url,
-                    decision=decision.decision,
-                    reason=decision.reason,
-                )
-            )
+            _record(step.action_type, target_url, decision.decision, decision.reason)
 
             element = None if step.action_type is ActionType.NAVIGATE else _synthetic_element(step)
             attempts += 1
@@ -510,6 +537,7 @@ def replay(
         if finished_by_operator:
             break
         steps_executed += 1
+        _emit("step", step_id=step.step_id, action_type=step.action_type.value, status="ok")
         if step.action_type is ActionType.EXTRACT and step.output_key:
             outputs[step.output_key] = outcome.extracted
 
@@ -518,7 +546,9 @@ def replay(
     while True:
         passed, message = check_checkpoint(driver, artifact.checkpoint)
         if passed:
+            _emit("checkpoint", passed=True)
             break
+        _emit("checkpoint", passed=False, message=message)
         classification = _classify(None)
         detailed = redact_text(
             f"{message}; classified {classification.category}: {classification.signal}",

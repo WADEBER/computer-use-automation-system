@@ -3,7 +3,8 @@
 Every line written to disk (and echoed to stdout) passes through
 ``redact_mapping`` first: secrets, PII and sensitive field keys are masked
 by the single ``RedactionConfig`` from ``config/policy.json`` (injected here
-for tests). The summary event goes to stdout only.
+for tests). The final summary event is appended to the log file and echoed
+to stdout, so the JSONL file is self-contained (steps + summary).
 """
 
 import json
@@ -39,5 +40,11 @@ class StepLogger:
         self._stdout.write(line + "\n")
 
     def write_summary(self, status: RunStatus, *, steps: int) -> None:
-        line = json.dumps({"event": "summary", "status": str(status), "steps": steps})
+        payload = redact_mapping(
+            {"event": "summary", "status": str(status), "steps": steps}, self.redaction
+        )
+        line = json.dumps(payload, ensure_ascii=False)
+        self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        with self.log_path.open("a", encoding="utf-8") as handle:
+            handle.write(line + "\n")
         self._stdout.write(line + "\n")

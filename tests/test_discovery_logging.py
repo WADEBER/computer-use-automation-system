@@ -91,6 +91,26 @@ def test_summary_line_reports_status(tmp_path) -> None:
     assert payload["steps"] == 3
 
 
+def test_summary_is_appended_to_the_log_file(tmp_path) -> None:
+    log_path = tmp_path / "steps.jsonl"
+    logger = StepLogger(log_path, _redaction(), stdout=io.StringIO())
+    logger.write_step(_record(1))
+    logger.write_summary(RunStatus.GOAL_REACHED, steps=1)
+    lines = log_path.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 2
+    summary = json.loads(lines[1])
+    assert summary == {"event": "summary", "status": "goal_reached", "steps": 1}
+
+
+def test_summary_file_line_is_redacted(tmp_path) -> None:
+    log_path = tmp_path / "steps.jsonl"
+    logger = StepLogger(log_path, _redaction(), stdout=io.StringIO())
+    logger.write_summary(RunStatus.DEAD_END, steps=2)
+    payload = json.loads(log_path.read_text(encoding="utf-8").strip())
+    assert payload["status"] == "dead_end"
+    assert payload["event"] == "summary"
+
+
 def test_creates_parent_directories(tmp_path) -> None:
     log_path = tmp_path / "nested" / "deep" / "steps.jsonl"
     logger = StepLogger(log_path, _redaction(), stdout=io.StringIO())

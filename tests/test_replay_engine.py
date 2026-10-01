@@ -537,6 +537,68 @@ def test_business_signal_beats_hard_pattern_in_engine() -> None:
     assert result.error.failure_category == "business_outcome"
 
 
+def test_optional_page_text_capability_feeds_classification() -> None:
+    """fix-4: a real browser only observes interactive elements, so static
+    messages ("No records found" in a plain <p>) are invisible to
+    ``observe_raw``. The optional ``page_text()`` capability (same getattr
+    pattern as ``screenshot_b64``) extends the classification text."""
+
+    class PageTextDriver(ReplayFakeDriver):
+        def page_text(self) -> str:
+            return 'Search Results. No records found. Member not found for "zzz".'
+
+    pages = {ENTRY: [{"tag": "a", "text": "Back to search", "href": "/"}]}
+    artifact = _mini(
+        [
+            Step(
+                step_id=1,
+                action_type=ActionType.TYPE,
+                description="type into a missing field",
+                locators=[Locator(type=LocatorType.CSS, value="#ghost")],
+                value="{{input.q}}",
+            )
+        ],
+        extra_input_properties={"q": {"type": "string"}},
+    )
+    result = replay(
+        artifact,
+        {"q": "zzz"},
+        PageTextDriver(pages, ENTRY),
+        _policy(),
+        taxonomy=_taxonomy_config(),
+    )
+    assert result.status is ReplayStatus.FAILURE
+    assert result.error is not None
+    assert result.error.failure_category == "business_outcome"
+    assert "No records found" in result.error.message
+
+
+def test_driver_without_page_text_keeps_the_legacy_classification() -> None:
+    pages = {ENTRY: [{"tag": "a", "text": "Back to search", "href": "/"}]}
+    artifact = _mini(
+        [
+            Step(
+                step_id=1,
+                action_type=ActionType.TYPE,
+                description="type into a missing field",
+                locators=[Locator(type=LocatorType.CSS, value="#ghost")],
+                value="{{input.q}}",
+            )
+        ],
+        extra_input_properties={"q": {"type": "string"}},
+    )
+    result = replay(
+        artifact,
+        {"q": "zzz"},
+        ReplayFakeDriver(pages, ENTRY),
+        _policy(),
+        taxonomy=_taxonomy_config(),
+    )
+    assert result.error is not None
+    assert result.error.failure_category == "hard"
+    assert "element_not_found" in result.error.message
+
+
 def test_step_failure_without_signal_is_hard_and_keeps_code() -> None:
     driver = ReplayFakeDriver({}, start_url=ENTRY)
     result = replay(

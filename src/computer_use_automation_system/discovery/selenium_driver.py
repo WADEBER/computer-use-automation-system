@@ -32,7 +32,11 @@ for (const el of nodes) {
   out.push({
     tag: (el.tagName || "").toLowerCase(),
     role: el.getAttribute("role") || "",
-    name: (el.getAttribute("aria-label") || el.innerText || el.value || "").trim().slice(0, 120),
+    label: (el.getAttribute("aria-label") || el.innerText || el.value || "").trim().slice(0, 120),
+    id: (el.id || "").slice(0, 100),
+    name_attr: (el.getAttribute("name") || "").slice(0, 100),
+    classes: Array.from(el.classList || []).slice(0, 10),
+    text: (el.innerText || "").trim().slice(0, 120),
     type: el.getAttribute("type") || "",
     value: (el.value || "").trim().slice(0, 200),
     placeholder: el.getAttribute("placeholder") || "",
@@ -131,6 +135,15 @@ class SeleniumDriver:
     def observe_raw(self) -> list[dict]:
         raw = self._driver.execute_script(OBSERVE_SCRIPT) or []
         return normalize_script_result(raw)
+
+    def page_text(self) -> str:
+        """Visible body text, bounded: feeds replay failure classification,
+        which otherwise only sees interactive elements (observe_raw)."""
+        try:
+            raw = self._driver.execute_script("return document.body ? document.body.innerText : ''")
+        except Exception:
+            return ""
+        return str(raw or "")[:20000]
 
     def current_url(self) -> str:
         return self._driver.current_url

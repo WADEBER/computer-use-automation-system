@@ -404,3 +404,65 @@ def test_keyboard_interrupt_returns_130(monkeypatch, capsys) -> None:
     captured = capsys.readouterr()
     assert "Traceback" not in captured.err
     assert "interrupted" in captured.err
+
+
+# --- Phase 9, HU-1: --log-out structured evidence ---------------------------
+
+
+def test_log_out_writes_start_engine_events_and_result_jsonl(monkeypatch, tmp_path) -> None:
+    import json
+
+    def fake_execute(artifact, inputs, policy, *, approved, max_timeout_ms, events=None):
+        assert events is not None
+        events({"event": "step", "step_id": 1, "action_type": "navigate"})
+        return _success()
+
+    monkeypatch.setattr(cli, "_execute_replay", fake_execute)
+    log_path = tmp_path / "replay.log"
+    code = _run(["--artifact", FIXTURE, "--input", "member_id=M-1001", "--log-out", str(log_path)])
+    assert code == 0
+    lines = log_path.read_text(encoding="utf-8").splitlines()
+    events = [json.loads(line) for line in lines]
+    assert events[0]["event"] == "start"
+    assert events[0]["capability_id"] == "lookup_member_balance"
+    assert events[0]["version"] == "1.0.0"
+    assert events[0]["input_keys"] == ["member_id"]
+    assert any(event["event"] == "step" for event in events)
+    assert events[-1]["event"] == "result"
+    assert events[-1]["status"] == "success"
+    assert events[-1]["steps_executed"] == 6
+
+
+def test_log_out_result_line_is_redacted_at_write_time(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(cli, "_execute_replay", lambda *a, **k: _success())
+    log_path = tmp_path / "replay.log"
+    code = _run(["--artifact", FIXTURE, "--input", "member_id=M-1001", "--log-out", str(log_path)])
+    assert code == 0
+    raw = log_path.read_text(encoding="utf-8")
+    assert "[REDACTED_AMOUNT]" in raw
+    assert "15200.00" not in raw
+
+
+def test_log_out_records_failure_result_event(monkeypatch, tmp_path) -> None:
+    import json
+
+    def fake_execute(artifact, inputs, policy, *, approved, max_timeout_ms, events=None):
+        events({"event": "failure", "stage": "step", "failure_category": "business_outcome"})
+        return _failure(ReplayStage.STEP, step_id=3)
+
+    monkeypatch.setattr(cli, "_execute_replay", fake_execute)
+    log_path = tmp_path / "replay.log"
+    code = _run(["--artifact", FIXTURE, "--input", "member_id=M-9999", "--log-out", str(log_path)])
+    assert code == 1
+    events = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+    assert [event["event"] for event in events] == ["start", "failure", "result"]
+    assert events[-1]["error"]["stage"] == "step"
+    assert events[-1]["status"] == "failure"
+
+
+def test_without_log_out_the_seam_signature_is_untouched(monkeypatch) -> None:
+    def fake_execute(artifact, inputs, policy, *, approved, max_timeout_ms):
+        return _success()
+
+    monkeypatch.setattr(cli, "_execute_replay", fake_execute)
+    assert _run(["--artifact", FIXTURE, "--input", "member_id=M-1001"]) == 0

@@ -64,7 +64,7 @@ docs/plans/
 | 6 | Deterministic Replay Engine | `fase_6/6.spec.md` | Completada |
 | 7 | Error Taxonomy | `fase_7/7.spec.md` | Completada |
 | 8 | Human-in-the-Loop Handoff | `fase_8/8.spec.md` | Completada |
-| 9 | Evidence, REPORT & Delivery | Pendiente | Pendiente |
+| 9 | Evidence, REPORT & Delivery | `fase_9/9.spec.md` | Completada |
 
 ---
 
@@ -189,8 +189,8 @@ docs/plans/
 ---
 
 ## Fase 9: Evidence, REPORT & Delivery
-- [ ] `/evidence/` final: artefacto de ejemplo + log de discovery real + log de replay exitoso + **≥1 replay con error/estado de excepción** manejado
-- [ ] `REPORT.md` (~1–3 páginas) con **exactamente** estos headings (inglés):
+- [x] `/evidence/` final: artefacto de ejemplo + log de discovery real + log de replay exitoso + **≥1 replay con error/estado de excepción** manejado
+- [x] `REPORT.md` (~1–3 páginas) con **exactamente** estos headings (inglés):
   1. Architecture
   2. Artifact schema
   3. Determinism & error handling
@@ -198,13 +198,14 @@ docs/plans/
   5. Escalation & handoff
   6. Safety
   7. Cuts
-- [ ] `README.md`: setup (keys/config), cómo correr sin servicios live si aplica, **demo path** con comandos exactos discovery → replay
-- [ ] Verificar: sin secretos/PII en repo; tipado; rutas de entregable exactas
-- [ ] Release gate: `/8-auditar` completo
-- [ ] Stretch opcional solo si hay base sólida (si no → documentar en Cuts)
-- [ ] Preparar defensa de trade-offs para la entrevista
+- [x] `README.md`: setup (keys/config), cómo correr sin servicios live si aplica, **demo path** con comandos exactos discovery → replay
+- [x] Verificar: sin secretos/PII en repo; tipado; rutas de entregable exactas
+- [x] Release gate: `/8-auditar` completo
+- [x] Stretch opcional solo si hay base sólida (si no → documentar en Cuts) — decisión: ninguno, documentado en `Cuts`
+- [x] Preparar defensa de trade-offs para la entrevista — `REPORT.md` (trade-offs + `Cuts`) y `README.md` (demo path verificable)
 
 **Cierre:** entregables en rutas exactas; evidencia completa; auditoría release sin Critical/High; repo listo para `assignments@interface.ai`.
+**Cerrada:** 2026-10-01 — 455 tests verdes; ruff/format/mypy/bandit en verde; auditoría `docs/security/audit-2026-10-01-release.md` (0 Critical/High; 3 Info + 2 DEF); evidencia viva en `evidence/` (discovery real con Ollama -> `artifact_example.json` + `discovery_run.log` con resumen; replay exitoso y replay `business_outcome` con `q=M-9999`); `REPORT.md` con los 7 headings exactos; `README.md` con demo path y verify-without-live; fixes 1-4 aplicados (ver §Correctivos de los planes de Fase 5/7/9); cierra el T13 pendiente de Fase 5; spec + plan en `fase_9/`.
 
 ---
 

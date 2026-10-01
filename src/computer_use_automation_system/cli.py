@@ -10,7 +10,9 @@ argparse usage errors always exit 2.
 
 import argparse
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from computer_use_automation_system.discovery.llm_client import OllamaClient
 from computer_use_automation_system.discovery.logging_runner import StepLogger
@@ -22,6 +24,7 @@ from computer_use_automation_system.discovery.models import (
 from computer_use_automation_system.discovery.runner import run_discovery
 from computer_use_automation_system.replay.engine import replay as run_replay
 from computer_use_automation_system.replay.handoff import Operator
+from computer_use_automation_system.replay.logging_runner import ReplayLogger
 from computer_use_automation_system.replay.models import (
     HandoffDecision,
     HandoffRequest,
@@ -92,6 +95,12 @@ def build_parser() -> argparse.ArgumentParser:
     discover.add_argument("--goal", required=True, type=_non_empty)
     discover.add_argument("--entry", required=True, type=_http_url)
     discover.add_argument("--max-steps", type=_positive_int, default=15)
+    discover.add_argument(
+        "--total-timeout-ms",
+        type=_positive_int,
+        default=None,
+        help="global budget for the whole discovery run (default 300000)",
+    )
     discover.add_argument("--artifact-out", default=None)
     discover.add_argument("--log-out", default=None)
     replay_cmd = subparsers.add_parser(
@@ -103,6 +112,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     replay_cmd.add_argument("--approved", action="store_true")
     replay_cmd.add_argument("--max-timeout-ms", type=_positive_int, default=None)
+    replay_cmd.add_argument(
+        "--log-out",
+        default=None,
+        help="write a redacted JSONL event log of this run (Phase 9 evidence)",
+    )
     replay_cmd.add_argument(
         "--interactive",
         action="store_true",
@@ -164,6 +178,7 @@ def _execute_replay(
     approved: bool,
     max_timeout_ms: int | None,
     operator: Operator | None = None,
+    events: Callable[[dict[str, object]], None] | None = None,
 ) -> ReplayResult:
     """Wire the real browser (Chrome, no LLM). Tests monkeypatch this."""
     from computer_use_automation_system.discovery.selenium_driver import build_webdriver
@@ -178,6 +193,7 @@ def _execute_replay(
             approved=approved,
             step_timeout_ms=max_timeout_ms,
             operator=operator,
+            events=events,
         )
     finally:
         driver.quit()
@@ -249,8 +265,20 @@ def _run_replay_command(namespace: argparse.Namespace) -> int:
         print(f"replay: invalid policy config (fields: {fields})", file=sys.stderr)
         return 2
     operator: Operator | None = PromptOperator() if namespace.interactive else None
-    if operator is None:
-        # Keep the legacy call shape byte-for-byte when --interactive is off.
+    logger: ReplayLogger | None = None
+    if namespace.log_out:
+        logger = ReplayLogger(namespace.log_out, policy.redaction)
+        logger.write(
+            {
+                "event": "start",
+                "capability_id": artifact.capability_id,
+                "version": artifact.version,
+                "input_keys": sorted(inputs),
+            }
+        )
+    if operator is None and logger is None:
+        # Keep the legacy call shape byte-for-byte when --interactive and
+        # --log-out are off.
         result = _execute_replay(
             artifact,
             inputs,
@@ -259,14 +287,21 @@ def _run_replay_command(namespace: argparse.Namespace) -> int:
             max_timeout_ms=namespace.max_timeout_ms,
         )
     else:
+        extras: dict[str, Any] = {}
+        if operator is not None:
+            extras["operator"] = operator
+        if logger is not None:
+            extras["events"] = logger.write
         result = _execute_replay(
             artifact,
             inputs,
             policy,
             approved=namespace.approved,
             max_timeout_ms=namespace.max_timeout_ms,
-            operator=operator,
+            **extras,
         )
+    if logger is not None:
+        logger.write({"event": "result", **result.model_dump(mode="json")})
     _print_replay_result(result, policy.redaction)
     return _replay_exit_code(result)
 
@@ -293,6 +328,8 @@ def main(argv: list[str] | None = None) -> int:
             overrides["artifact_out"] = Path(namespace.artifact_out)
         if namespace.log_out:
             overrides["log_out"] = Path(namespace.log_out)
+        if namespace.total_timeout_ms:
+            overrides["total_timeout_ms"] = namespace.total_timeout_ms
         config = DiscoveryConfig(
             goal=namespace.goal,
             entry_url=namespace.entry,
