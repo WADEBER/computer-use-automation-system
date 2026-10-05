@@ -89,6 +89,8 @@ def test_total_timeout_flag_reaches_the_discovery_config(monkeypatch, tmp_path) 
         return DiscoveryResult(status=RunStatus.TIMEOUT, steps=[])
 
     monkeypatch.setattr(cli, "_execute", fake_execute)
+    # --artifact-out must resolve inside the working directory (SEC-505).
+    monkeypatch.chdir(tmp_path)
     code = cli.main(
         [
             "discover",
@@ -116,6 +118,8 @@ def test_each_status_maps_to_its_exit_code(monkeypatch, tmp_path) -> None:
             return DiscoveryResult(status=status, steps=[], artifact=artifact)
 
         monkeypatch.setattr(cli, "_execute", fake_execute)
+        # --artifact-out must resolve inside the working directory (SEC-505).
+        monkeypatch.chdir(tmp_path)
         code = cli.main(
             [
                 "discover",
@@ -179,6 +183,8 @@ def test_flags_reach_the_discovery_config(monkeypatch, tmp_path) -> None:
         return DiscoveryResult(status=RunStatus.TIMEOUT, steps=[])
 
     monkeypatch.setattr(cli, "_execute", fake_execute)
+    # --artifact-out must resolve inside the working directory (SEC-505).
+    monkeypatch.chdir(tmp_path)
     cli.main(
         [
             "discover",
@@ -199,6 +205,31 @@ def test_flags_reach_the_discovery_config(monkeypatch, tmp_path) -> None:
     assert config.max_steps == 3
     assert config.artifact_out == tmp_path / "art.json"
     assert config.log_out == tmp_path / "log.jsonl"
+
+
+def test_artifact_out_outside_the_working_tree_exits_2(monkeypatch, tmp_path, capsys) -> None:
+    """SEC-505: the CLI refuses to write the artifact outside the working
+    tree before any browser or LLM work starts."""
+
+    def must_not_run(config, policy, logger):
+        raise AssertionError("the run must never start")
+
+    monkeypatch.setattr(cli, "_execute", must_not_run)
+    code = cli.main(
+        [
+            "discover",
+            "--goal",
+            "g",
+            "--entry",
+            "http://127.0.0.1:5000/",
+            "--artifact-out",
+            str(tmp_path / "outside.json"),
+        ]
+    )
+    assert code == 2
+    captured = capsys.readouterr()
+    assert "--artifact-out must stay inside the working directory" in captured.err
+    assert "Traceback" not in captured.err
 
 
 def test_policy_comes_from_the_single_config_file(monkeypatch, tmp_path) -> None:

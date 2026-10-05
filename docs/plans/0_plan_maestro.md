@@ -205,7 +205,7 @@ docs/plans/
 - [x] Preparar defensa de trade-offs para la entrevista — `REPORT.md` (trade-offs + `Cuts`) y `README.md` (demo path verificable)
 
 **Cierre:** entregables en rutas exactas; evidencia completa; auditoría release sin Critical/High; repo listo para `assignments@interface.ai`.
-**Cerrada:** 2026-10-01 — 455 tests verdes; ruff/format/mypy/bandit en verde; auditoría `docs/security/audit-2026-10-01-release.md` (0 Critical/High; 3 Info + 2 DEF); evidencia viva en `evidence/` (discovery real con Ollama -> `artifact_example.json` + `discovery_run.log` con resumen; replay exitoso y replay `business_outcome` con `q=M-9999`); `REPORT.md` con los 7 headings exactos; `README.md` con demo path y verify-without-live; fixes 1-4 aplicados (ver §Correctivos de los planes de Fase 5/7/9); cierra el T13 pendiente de Fase 5; spec + plan en `fase_9/`.
+**Cerrada:** 2026-10-01 — 468 tests verdes; ruff/format/mypy/bandit en verde; auditoría `docs/security/audit-2026-10-01-release.md` (0 Critical/High; 3 Info + 2 DEF); evidencia viva en `evidence/` (discovery real con Ollama -> `artifact_example.json` + `discovery_run.log` con resumen; replay exitoso y replay `business_outcome` con `q=M-9999`); `REPORT.md` con los 7 headings exactos; `README.md` con demo path y verify-without-live; fixes 1-4 aplicados (ver §Correctivos de los planes de Fase 5/7/9); cierra el T13 pendiente de Fase 5; spec + plan en `fase_9/`.
 
 ---
 

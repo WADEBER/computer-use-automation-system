@@ -3,6 +3,8 @@ import json
 from pathlib import Path
 from urllib.parse import urljoin
 
+import pytest
+
 from computer_use_automation_system.artifact.models import ActionType, Artifact, ExpectedCondition
 from computer_use_automation_system.discovery.logging_runner import StepLogger
 from computer_use_automation_system.discovery.models import (
@@ -408,3 +410,50 @@ def test_non_navigate_values_stay_bounded_in_the_preview(tmp_path) -> None:
         elapsed_ms=1,
     )
     assert nav_record.value_preview == nav_action.value
+
+
+def test_out_root_allows_the_artifact_write_inside_it(tmp_path) -> None:
+    """SEC-505: with an explicit out_root the run still writes normally
+    when the artifact resolves inside that root."""
+    root = tmp_path / "root"
+    driver = FakeDriver({ENTRY_URL: _ENTRY_RAW, MEMBERS_URL: _MEMBERS_RAW}, ENTRY_URL)
+    llm = ScriptedLLM(
+        actions=[
+            '{"action": "click", "element_ref": 1, "value": null, "reason": "open detail"}',
+            '{"action": "extract", "element_ref": 1, "value": null, "reason": "read balance"}',
+        ],
+        goals=[
+            '{"goal_reached": false, "reason": "not yet"}',
+            '{"goal_reached": false, "reason": "not yet"}',
+            '{"goal_reached": true, "reason": "balance is on screen"}',
+        ],
+    )
+    config = _config(tmp_path, artifact_out=root / "artifact.json", out_root=root)
+    result = _run(config, driver, llm, _policy())
+
+    assert result.status is RunStatus.GOAL_REACHED
+    assert result.artifact_path is not None
+    assert Path(result.artifact_path).exists()
+
+
+def test_out_root_blocks_the_artifact_write_outside_it(tmp_path) -> None:
+    """SEC-505: a mistyped destination outside out_root fails closed with a
+    PermissionError instead of writing anywhere on disk."""
+    root = tmp_path / "root"
+    root.mkdir()
+    driver = FakeDriver({ENTRY_URL: _ENTRY_RAW, MEMBERS_URL: _MEMBERS_RAW}, ENTRY_URL)
+    llm = ScriptedLLM(
+        actions=[
+            '{"action": "click", "element_ref": 1, "value": null, "reason": "open detail"}',
+            '{"action": "extract", "element_ref": 1, "value": null, "reason": "read balance"}',
+        ],
+        goals=[
+            '{"goal_reached": false, "reason": "not yet"}',
+            '{"goal_reached": false, "reason": "not yet"}',
+            '{"goal_reached": true, "reason": "balance is on screen"}',
+        ],
+    )
+    config = _config(tmp_path, artifact_out=tmp_path / "outside.json", out_root=root)
+    with pytest.raises(PermissionError, match="escapes base_dir"):
+        _run(config, driver, llm, _policy())
+    assert not (tmp_path / "outside.json").exists()

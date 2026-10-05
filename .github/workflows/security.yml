@@ -67,20 +67,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.11"
-      - name: Install pip-audit
-        run: pip install pip-audit
+          enable-cache: true
+
+      - name: Export locked dependencies
+        # Audita el set fijado en uv.lock (runtime + dev), no el tooling del
+        # runner: pip install -e . && pip-audit auditaba tambien el setuptools
+        # del propio runner (CVEs ajenos al proyecto) y rompia el gate.
+        run: uv export --no-hashes --no-emit-project -o requirements.ci.txt
+
       - name: Run pip-audit
-        # Modo "require" falla con cualquier CVE en dependencias declaradas.
-        # Ajustar a --no-deps o --strict según necesidad del proyecto.
-        run: |
-          if [ -f requirements.txt ]; then
-            pip-audit -r requirements.txt --desc
-          else
-            pip install -e . && pip-audit --desc
-          fi
+        # Cualquier CVE en dependencias lockeadas bloquea el PR.
+        run: uvx pip-audit -r requirements.ci.txt --strict --desc
 
   python-secrets:
     name: Secret scanning (detect-secrets)
@@ -95,15 +96,38 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install detect-secrets
-        run: pip install detect-secrets
+        # Version pinned so the scan matches the committed baseline.
+        run: pip install detect-secrets==1.5.0
       - name: Scan for secrets
-        # Si el repo tiene baseline (.secrets.baseline), usarla; si no, escanear todo.
+        # SEC-901: `detect-secrets scan` solo genera un baseline y sale con 0,
+        # asi que el job nunca podia bloquear un secreto. Ahora se escanea
+        # fresco con los mismos argumentos con los que se genero
+        # .secrets.baseline y se falla si aparece un hallazgo que no este ahi.
+        # Los paths se normalizan porque el baseline se genera en Windows.
         run: |
-          if [ -f .secrets.baseline ]; then
-            detect-secrets audit .secrets.baseline
-          else
-            detect-secrets scan --all-files
-          fi
+          detect-secrets scan --exclude-files '\.claude' > fresh.baseline
+          python - <<'PY'
+          import json, sys
+
+          base = json.load(open(".secrets.baseline", encoding="utf-8-sig"))["results"]
+          fresh = json.load(open("fresh.baseline", encoding="utf-8-sig"))["results"]
+
+
+          def flatten(results):
+              return {
+                  (item["filename"].replace("\\", "/"), item["hashed_secret"])
+                  for items in results.values()
+                  for item in items
+              }
+
+
+          known, found = flatten(base), flatten(fresh)
+          new = found - known
+          for file, _ in sorted(new):
+              print(f"::error file={file}::new secret detected by detect-secrets (not in .secrets.baseline)")
+          print(f"known={len(known)} found={len(found)} new={len(new)}")
+          sys.exit(1 if new else 0)
+          PY
 
   node-deps:
     name: Node dependency scan (npm audit)

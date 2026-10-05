@@ -15,7 +15,7 @@ Key trade-offs:
 - **Local, text-only LLM.** `qwen2.5-coder:7b` via Ollama costs no API budget and keeps runs offline; being text-only forces observe to emit a clean DOM/accessibility snapshot instead of screenshots, which also keeps prompts small and logs reviewable. The cost is a weaker planner: live runs need a precise goal statement (URL + element names) and a step/time budget.
 - **One CLI, two modes of trust.** `discover` may improvise (LLM); `replay` never does (enforced by a static import test over `replay/`). The artifact is the hand-off point between the two.
 - **Config over code.** Policy, redaction patterns and failure patterns are JSON files, so an operator retunes guardrails or error vocabulary without a code change.
-- **Tests use fakes, evidence uses live runs.** The suite (468 tests) injects a fake LLM and fake driver; `/evidence/` is produced only by real Chrome + Ollama + the proxy app.
+- **Tests use fakes, evidence uses live runs.** The suite (474 tests) injects a fake LLM and fake driver; `/evidence/` is produced only by real Chrome + Ollama + the proxy app.
 
 ```mermaid
 flowchart LR

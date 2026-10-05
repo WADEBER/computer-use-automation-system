@@ -24,6 +24,8 @@ from computer_use_automation_system.replay.inputs import (
     validate_inputs,
 )
 from computer_use_automation_system.replay.models import (
+    MAX_HANDOFF_TEXT,
+    MAX_SNAPSHOT_ELEMENTS,
     ControlState,
     DecisionRecord,
     FailureCategory,
@@ -188,11 +190,12 @@ def replay(
         the full page text (fix-4): static messages such as "No records found"
         live outside interactive elements, so observe_raw alone would demote a
         business outcome to `hard`. Optional capability via getattr, same
-        pattern as `_screenshot`."""
+        pattern as `_screenshot`; a descriptor that blows up (DEF-803) counts
+        as "no capability" instead of crashing the run."""
         elements: list[dict[str, object]] = list(driver.observe_raw())
         try:
             page_text = getattr(driver, "page_text", None)
-        except Exception:
+        except (AttributeError, TypeError):
             page_text = None
         if callable(page_text):
             try:
@@ -204,17 +207,21 @@ def replay(
         return classify_failure(code, elements, taxonomy)
 
     def _snapshot() -> list[dict[str, object]]:
-        """Redacted DOM snapshot; the engine only observes while it owns control."""
+        """Redacted DOM snapshot; the engine only observes while it owns
+        control. Bounded (SEC-805): a page with thousands of nodes must not
+        flood the pause package."""
         if control == "human":
             raise AssertionError("driver touched while human has control")
         raw: list[dict[str, object]] = redact_mapping(driver.observe_raw(), policy.redaction)
-        return raw
+        return raw[:MAX_SNAPSHOT_ELEMENTS]
 
     def _screenshot() -> str | None:
-        """Best-effort evidence image: `None` when the driver exposes none (CI)."""
+        """Best-effort evidence image: `None` when the driver exposes none (CI).
+        A descriptor raising AttributeError/TypeError counts as "no driver
+        support" (DEF-803); anything else is a programming error and shows."""
         try:
             shot = getattr(driver, "screenshot_b64", None)
-        except Exception:
+        except (AttributeError, TypeError):
             return None
         return shot if isinstance(shot, str) else None
 
@@ -241,9 +248,9 @@ def replay(
             stage=stage,
             step_id=step_id,
             action=action,
-            reason=redact_text(reason, policy.redaction),
+            reason=redact_text(reason, policy.redaction)[:MAX_HANDOFF_TEXT],
             capability=f"{artifact.capability_id} v{artifact.version}",
-            description=redact_text(artifact.description, policy.redaction),
+            description=redact_text(artifact.description, policy.redaction)[:MAX_HANDOFF_TEXT],
             snapshot=_snapshot(),
             screenshot=_screenshot(),
         )
@@ -257,7 +264,9 @@ def replay(
             request=request,
             decision=response.decision,
             note=(
-                redact_text(response.note, policy.redaction) if response.note is not None else None
+                redact_text(response.note, policy.redaction)[:MAX_HANDOFF_TEXT]
+                if response.note is not None
+                else None
             ),
             resumed_snapshot=None if response.decision == "abort" else _snapshot(),
         )

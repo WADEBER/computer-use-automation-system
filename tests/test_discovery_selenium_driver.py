@@ -11,6 +11,7 @@ from selenium.common.exceptions import (
 from selenium.webdriver.common.by import By
 
 from computer_use_automation_system.artifact.models import Locator, LocatorType
+from computer_use_automation_system.discovery.act import DriverActionError
 from computer_use_automation_system.discovery.selenium_driver import (
     OBSERVE_SCRIPT,
     SeleniumDriver,
@@ -71,6 +72,33 @@ def test_translate_driver_errors_to_typed_codes() -> None:
     assert translate_driver_error(NoSuchElementException()).code == "element_not_found"
     with pytest.raises(WebDriverException):
         translate_driver_error(WebDriverException("boom"))
+
+
+def test_navigate_only_accepts_http_schemes() -> None:
+    """SEC-503 (defense in depth): LLMAction/Step already require http(s),
+    but the driver itself must never hand file:// or data: to the browser."""
+
+    class StubWebDriver:
+        def __init__(self) -> None:
+            self.visited: list[str] = []
+
+        def get(self, url: str) -> None:
+            self.visited.append(url)
+
+        def execute_script(self, script: str) -> str:
+            return "complete"
+
+    stub = StubWebDriver()
+    driver = SeleniumDriver(stub)  # type: ignore[arg-type]
+
+    for bad in ("file:///etc/passwd", "data:text/html,<script>x</script>", "chrome://settings"):
+        with pytest.raises(DriverActionError) as exc:
+            driver.navigate(bad)
+        assert exc.value.code == "invalid_value"
+    assert stub.visited == []
+
+    driver.navigate("http://127.0.0.1:5000/")
+    assert stub.visited == ["http://127.0.0.1:5000/"]
 
 
 def test_observe_script_targets_interactive_elements_only() -> None:

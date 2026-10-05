@@ -307,16 +307,26 @@ def _run_replay_command(namespace: argparse.Namespace) -> int:
     return _replay_exit_code(result)
 
 
+def _within(path: Path, root: Path) -> bool:
+    """True when `path` resolves inside `root` (SEC-505 output containment)."""
+    try:
+        Path(path).resolve().relative_to(Path(root).resolve())
+    except ValueError:
+        return False
+    return True
+
+
 def _run_discover_command(namespace: argparse.Namespace) -> int:
     """Build the config/policy, run the loop and map status to an exit code.
 
     Config problems exit 2 (like replay); unexpected infrastructure errors
     (browser, Ollama connection) exit 1 with a single redacted line instead
-    of a raw traceback.
+    of a raw traceback. Artifact output is contained in the working
+    directory so a mistyped --artifact-out can not write outside the tree.
     """
     from pydantic import ValidationError
 
-    overrides: dict = {}
+    overrides: dict = {"out_root": Path.cwd()}
     if namespace.artifact_out:
         overrides["artifact_out"] = Path(namespace.artifact_out)
     if namespace.log_out:
@@ -334,6 +344,10 @@ def _run_discover_command(namespace: argparse.Namespace) -> int:
         # Never echo config values back (CWE-209): only field names.
         fields = ", ".join(".".join(str(part) for part in err["loc"]) for err in exc.errors())
         print(f"discover: invalid configuration (fields: {fields})", file=sys.stderr)
+        return 2
+
+    if not _within(config.artifact_out, Path.cwd()):
+        print("discover: --artifact-out must stay inside the working directory", file=sys.stderr)
         return 2
 
     try:

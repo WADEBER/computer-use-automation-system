@@ -202,6 +202,7 @@ def run_discovery(
             config.artifact_out,
             artifact.model_dump_json(indent=2),
             policy.redaction,
+            base_dir=config.out_root,
         )
         artifact_path = Path(config.artifact_out)
 

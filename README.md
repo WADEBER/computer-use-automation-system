@@ -52,7 +52,7 @@ The target application is a deliberately realistic legacy banking console (**Mem
 | 8 | Human-in-the-Loop Handoff | Completed |
 | 9 | Evidence, REPORT & Delivery | Completed |
 
-Current test suite: **468 tests passing** (pytest), with ruff (lint + format), mypy and bandit in green.
+Current test suite: **474 tests passing** (pytest), with ruff (lint + format), mypy and bandit in green.
 
 Roadmap and design decisions: [`docs/plans/0_plan_maestro.md`](docs/plans/0_plan_maestro.md).
 
@@ -99,7 +99,7 @@ Prerequisites beyond `uv` (Chrome, Ollama with `qwen2.5-coder:7b`) are listed un
 ### 3. Run the test suite
 
 ```bash
-uv run pytest        # 468 tests
+uv run pytest        # 474 tests
 ```
 
 ### 4. (Optional) Run the target application
@@ -184,7 +184,7 @@ All six files are written through the redaction layer at write time and contain 
 No browser, no Ollama and no network are needed to verify the system:
 
 ```bash
-uv run pytest                     # 468 tests; fake LLM + fake driver injected everywhere
+uv run pytest                     # 474 tests; fake LLM + fake driver injected everywhere
 uv run ruff check src/ tests/     # lint
 uv run ruff format --check src/ tests/
 uv run mypy src                   # type check
@@ -482,7 +482,7 @@ decision [resume|finish|abort]:
 | Command | What it does |
 |---------|--------------|
 | `uv sync` | Install/refresh dependencies from `uv.lock` |
-| `uv run pytest` | Run the full test suite (468 tests) |
+| `uv run pytest` | Run the full test suite (474 tests) |
 | `uv run ruff check src/ tests/` | Lint |
 | `uv run ruff format src/ tests/` | Format |
 | `uv run ruff format --check src/ tests/` | Verify formatting (CI) |
@@ -514,21 +514,21 @@ decision [resume|finish|abort]:
 | `tests/test_discovery_decide.py` | 12 | Prompt building, strict action parsing, retries |
 | `tests/test_discovery_llm_client.py` | 6 | Ollama client, fake transport, error mapping, single reused client/timeout |
 | `tests/test_discovery_act.py` | 8 | click/type/navigate/extract semantics |
-| `tests/test_discovery_selenium_driver.py` | 15 | By mapping, XPath escaping, script translation, observe-script fields, `page_text`, static anti-sleep, URL locator rejection |
+| `tests/test_discovery_selenium_driver.py` | 16 | By mapping, XPath escaping, script translation, observe-script fields, `page_text`, http(s) scheme guard on `navigate`, static anti-sleep, URL locator rejection |
 | `tests/test_discovery_goal.py` | 11 | Goal verdict prompt/parse, retries |
 | `tests/test_discovery_artifact.py` | 15 | Step sources -> artifact, parametrization, slugs, area-prefix checkpoint |
 | `tests/test_discovery_logging.py` | 7 | JSONL steps, persisted summary, redaction per line |
-| `tests/test_discovery_runner.py` | 13 | Full loop per status, determinism, policy invariant, untruncated navigate URLs |
-| `tests/test_cli_discover.py` | 16 | Parser, help/usage, exit-code mapping, error paths, `--total-timeout-ms` |
+| `tests/test_discovery_runner.py` | 15 | Full loop per status, determinism, policy invariant, `out_root` write containment, untruncated navigate URLs |
+| `tests/test_cli_discover.py` | 17 | Parser, help/usage, exit-code mapping, error paths, `--artifact-out` containment, `--total-timeout-ms` |
 | `tests/test_replay_models.py` | 12 | Result contract, stage/policy invariants, round-trip |
 | `tests/test_replay_inputs.py` | 10 | input_schema validation, `{{input.*}}` resolution |
 | `tests/test_replay_checkpoint.py` | 7 | visible/text_present/url_contains, fallback, timeout |
 | `tests/test_replay_engine.py` | 36 | Happy path, failure stages, policy gates, determinism, failure categories, `page_text` classification, retries/dismiss, anti-LLM static test |
 | `tests/test_replay_taxonomy.py` | 36 | `FailureCategory` contract, taxonomy config validation/loading, classifier precedence, config-driven reclassification |
-| `tests/test_replay_handoff.py` | 36 | Handoff contracts, 4 triggers, control state, operator decisions, handoff records, exports |
+| `tests/test_replay_handoff.py` | 38 | Handoff contracts, size caps, 4 triggers, control state, operator decisions, handoff records, exports |
 | `tests/test_cli_replay.py` | 39 | replay flags (incl. `--interactive`, `--log-out`), exit codes 0/10/11/1/2/130, stderr diagnostics, category line, taxonomy/policy config errors, prompt operator |
 | `tests/test_replay_logging.py` | 7 | Replay timeline events (policy/steps/checkpoint/handoff/failure), `--log-out` writer, redaction |
-| **Total** | **468** | |
+| **Total** | **474** | |
 
 ### Quality gates
 
@@ -594,7 +594,7 @@ decision [resume|finish|abort]:
 │       ├── routes.py                      # Search/detail/disburse flows
 │       ├── data.py                        # Deterministic in-memory seed
 │       └── templates/                     # Legacy-style HTML (no test IDs)
-├── tests/                                 # Flat test suite (468 tests)
+├── tests/                                 # Flat test suite (474 tests)
 │   ├── fixtures/                          # Artifact fixtures
 │   │   ├── valid_artifact.json
 │   │   └── invalid/                       # bad_locator, bad_input_ref, ...

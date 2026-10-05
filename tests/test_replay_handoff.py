@@ -23,6 +23,8 @@ from computer_use_automation_system.discovery.models import ObservedElement
 from computer_use_automation_system.replay.engine import replay
 from computer_use_automation_system.replay.handoff import Operator
 from computer_use_automation_system.replay.models import (
+    MAX_HANDOFF_TEXT,
+    MAX_SNAPSHOT_ELEMENTS,
     ControlState,
     HandoffDecision,
     HandoffRecord,
@@ -297,6 +299,35 @@ def test_operator_response_is_strict() -> None:
         OperatorResponse(decision="escalate")
     response = OperatorResponse(decision="finish", note="handled manually")
     assert response.decision == "finish"
+
+
+def test_pause_package_enforces_text_and_snapshot_caps() -> None:
+    """SEC-805: the pause package and its evidence record are bounded, so a
+    hostile page or an oversized note can not flood the operator prompt or
+    the persisted handoff log (fail closed at model level)."""
+    oversized_snapshot = [{"tag": "div", "id": "main"}] * (MAX_SNAPSHOT_ELEMENTS + 1)
+    with pytest.raises(ValidationError):
+        HandoffRequest.model_validate({**_request_payload(), "snapshot": oversized_snapshot})
+    with pytest.raises(ValidationError):
+        HandoffRequest.model_validate(
+            {**_request_payload(), "reason": "r" * (MAX_HANDOFF_TEXT + 1)}
+        )
+    with pytest.raises(ValidationError):
+        HandoffRequest.model_validate(
+            {**_request_payload(), "description": "d" * (MAX_HANDOFF_TEXT + 1)}
+        )
+    with pytest.raises(ValidationError):
+        HandoffRecord.model_validate({**_record_payload(0), "note": "n" * (MAX_HANDOFF_TEXT + 1)})
+    with pytest.raises(ValidationError):
+        HandoffRecord.model_validate({**_record_payload(0), "resumed_snapshot": oversized_snapshot})
+    ok = HandoffRequest.model_validate(
+        {
+            **_request_payload(),
+            "snapshot": [{"tag": "div"}] * MAX_SNAPSHOT_ELEMENTS,
+            "reason": "r" * MAX_HANDOFF_TEXT,
+        }
+    )
+    assert len(ok.snapshot) == MAX_SNAPSHOT_ELEMENTS
 
 
 def test_fake_operator_satisfies_the_operator_protocol_and_collects_requests() -> None:
@@ -615,6 +646,42 @@ def test_risky_step_trigger_pauses_before_the_action_and_resume_approves() -> No
     assert not any(call[0] == "quit" for call in driver.calls)
     entered, exited = operator.calls_during_wait[0]
     assert entered == exited
+
+
+def test_pause_package_is_truncated_at_capture_and_broken_evidence_helpers() -> None:
+    """SEC-805 + DEF-803: the engine bounds what it captures (snapshot and
+    operator note) and treats a broken optional evidence helper as "absent"
+    instead of crashing the pause."""
+
+    class HugeDriver(ReplayFakeDriver):
+        def observe_raw(self) -> list[dict]:
+            self._guard()
+            return [{"tag": "div", "id": f"n{i}"} for i in range(MAX_SNAPSHOT_ELEMENTS + 80)]
+
+        @property
+        def screenshot_b64(self) -> str:
+            raise TypeError("screenshot backend exploded")
+
+    driver = HugeDriver(_pages(), START)
+    operator = FakeOperator(
+        driver,
+        responses=[OperatorResponse(decision="resume", note="n" * (MAX_HANDOFF_TEXT + 500))],
+    )
+    result = replay(
+        _risky_artifact(),
+        {},
+        driver,
+        _policy(_confirm_rules()),
+        operator=operator,
+    )
+    assert result.status is ReplayStatus.SUCCESS
+    record = result.handoff[0]
+    assert len(record.request.snapshot) == MAX_SNAPSHOT_ELEMENTS
+    assert record.request.screenshot is None
+    assert record.resumed_snapshot is not None
+    assert len(record.resumed_snapshot) == MAX_SNAPSHOT_ELEMENTS
+    assert record.note is not None
+    assert len(record.note) == MAX_HANDOFF_TEXT
 
 
 def test_needs_approval_trigger_pauses_on_the_enforce_dismiss_path() -> None:

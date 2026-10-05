@@ -95,6 +95,12 @@ HandoffDecision = Literal["resume", "finish", "abort"]
 
 ControlState = Literal["automation", "human"]
 
+# SEC-805: bounds on the pause package so a hostile or huge page can not
+# flood the operator prompt or the persisted evidence. The engine truncates
+# at capture; these limits fail closed if a caller skips that path.
+MAX_SNAPSHOT_ELEMENTS = 100
+MAX_HANDOFF_TEXT = 2000
+
 
 class HandoffRequest(BaseModel):
     """Intervention package handed to the operator (spec Phase 8, HU-2).
@@ -111,10 +117,10 @@ class HandoffRequest(BaseModel):
     stage: ReplayStage
     step_id: int | None = Field(default=None, ge=1)
     action: ActionType | None = None
-    reason: str = Field(min_length=1)
+    reason: str = Field(min_length=1, max_length=MAX_HANDOFF_TEXT)
     capability: str = Field(min_length=1)
-    description: str = Field(min_length=1)
-    snapshot: list[dict[str, object]]
+    description: str = Field(min_length=1, max_length=MAX_HANDOFF_TEXT)
+    snapshot: list[dict[str, object]] = Field(max_length=MAX_SNAPSHOT_ELEMENTS)
     screenshot: str | None = None
 
     @model_validator(mode="after")
@@ -145,8 +151,10 @@ class HandoffRecord(BaseModel):
     index: int = Field(ge=0)
     request: HandoffRequest
     decision: HandoffDecision
-    note: str | None = Field(default=None, min_length=1)
-    resumed_snapshot: list[dict[str, object]] | None = None
+    note: str | None = Field(default=None, min_length=1, max_length=MAX_HANDOFF_TEXT)
+    resumed_snapshot: list[dict[str, object]] | None = Field(
+        default=None, max_length=MAX_SNAPSHOT_ELEMENTS
+    )
 
     @model_validator(mode="after")
     def _decision_rules(self) -> "HandoffRecord":

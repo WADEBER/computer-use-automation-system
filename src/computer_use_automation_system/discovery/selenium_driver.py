@@ -153,6 +153,12 @@ class SeleniumDriver:
         return self._driver.current_url
 
     def navigate(self, url: str) -> None:
+        # SEC-503 (defense in depth): LLMAction/Step already require an
+        # http(s) URL, but the driver itself never lets file://, data: or
+        # chrome:// reach the browser (local files must not become readable
+        # through extract_text).
+        if not url.startswith(("http://", "https://")):
+            raise DriverActionError("invalid_value")
         try:
             self._driver.get(url)
             self._wait.until(lambda d: d.execute_script("return document.readyState") == "complete")

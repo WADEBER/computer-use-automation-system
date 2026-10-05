@@ -52,6 +52,11 @@ class DiscoveryConfig(BaseModel):
     max_llm_retries: int = Field(default=2, ge=0)
     artifact_out: Path = Field(default_factory=_default_artifact_out)
     log_out: Path = Field(default_factory=_default_log_out)
+    # SEC-505: when set, artifact writes must resolve inside this directory
+    # (fail closed). The CLI passes Path.cwd() so --artifact-out can not
+    # escape the working tree; library callers keep the unconstrained
+    # default (None) they had before.
+    out_root: Path | None = Field(default=None)
     ollama_base_url: str = Field(
         default_factory=lambda: os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
     )
