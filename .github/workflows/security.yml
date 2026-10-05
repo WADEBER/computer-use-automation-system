@@ -104,8 +104,11 @@ jobs:
         # fresco con los mismos argumentos con los que se genero
         # .secrets.baseline y se falla si aparece un hallazgo que no este ahi.
         # Los paths se normalizan porque el baseline se genera en Windows.
+        # .secrets.baseline se excluye porque si no, detect-secrets encuentra
+        # sus propios hashed_secret dentro del archivo y marca esos
+        # hallazgos como nuevos en cada corrida.
         run: |
-          detect-secrets scan --exclude-files '\.claude' > fresh.baseline
+          detect-secrets scan --exclude-files '(\.claude|\.secrets\.baseline)' > fresh.baseline
           python - <<'PY'
           import json, sys
 
