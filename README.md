@@ -1,5 +1,10 @@
 # computer-use-automation-system
 
+[![CI](https://github.com/WADEBER/computer-use-automation-system/actions/workflows/ci.yml/badge.svg)](https://github.com/WADEBER/computer-use-automation-system/actions/workflows/ci.yml)
+[![Security](https://github.com/WADEBER/computer-use-automation-system/actions/workflows/security.yml/badge.svg)](https://github.com/WADEBER/computer-use-automation-system/actions/workflows/security.yml)
+[![Tests](https://img.shields.io/badge/tests-474%20passed-brightgreen)](#test-suite)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/downloads/)
+
 A goal-driven **computer-use automation system** that gives AI agents "hands" over legacy, API-less back-office banking applications. An LLM-driven discovery run is compiled into a typed, reusable **artifact**; the artifact is then replayed **deterministically without an LLM**, escalates to a **human in the same live session** when blocked, and applies **safety guardrails** around regulated financial data.
 
 Built as a take-home technical assignment for **interface.ai**.
@@ -11,12 +16,16 @@ Built as a take-home technical assignment for **interface.ai**.
 - [Requirements](#requirements)
 - [Quick start](#quick-start)
 - [Demo path (live run)](#demo-path-live-run)
+- [How to verify the evidence](#how-to-verify-the-evidence)
+- [Exit codes at a glance](#exit-codes-at-a-glance)
 - [Verify without live services](#verify-without-live-services)
 - [The proxy target app (MemberServ Console)](#the-proxy-target-app-memberserv-console)
 - [The artifact schema](#the-artifact-schema)
 - [The safety policy](#the-safety-policy)
+- [Security](#security)
 - [The discovery loop (Phase 5)](#the-discovery-loop-phase-5)
 - [The deterministic replay (Phase 6)](#the-deterministic-replay-phase-6)
+- [Troubleshooting](#troubleshooting)
 - [Development](#development)
 - [Project structure](#project-structure)
 - [Documentation](#documentation)
@@ -35,6 +44,21 @@ The system turns a one-off LLM discovery run into a reusable automation capabili
 5. **Human-in-the-loop (Phase 8, implemented)** — blocked runs escalate to a human on the **same live browser session** via `replay --interactive` (`resume` / `finish` / `abort`); no session restarts.
 
 The target application is a deliberately realistic legacy banking console (**MemberServ**) living in this repository (`src/proxy_app/`), so the whole loop can be developed and demonstrated locally without external systems.
+
+```mermaid
+flowchart LR
+    G[Goal + entry URL] --> O[observe: clean DOM snapshot]
+    O --> C{goal reached?}
+    C -- yes --> A[build typed artifact]
+    C -- no --> D[decide: typed LLM action]
+    D --> P[policy enforce]
+    P --> AC[act: Selenium + locator fallback]
+    AC --> O
+    A --> R[replay: NO LLM]
+    R --> CK{checkpoint}
+    CK -- pass --> S[typed success]
+    CK -- fail --> F[typed failure + category]
+```
 
 ---
 
@@ -176,6 +200,42 @@ uv run computer-use-automation-system replay \
 | [`evidence/handoff_run.log`](evidence/handoff_run.log) | Full interactive replay timeline: `handoff` pause (`trigger=risky_step`), operator decision `resume`, checkpoint, `result: success`, exit `0` |
 
 All six files are written through the redaction layer at write time and contain only synthetic seed data. Design report: [`REPORT.md`](REPORT.md).
+
+---
+
+## How to verify the evidence
+
+Every log is JSONL: one event object per line (`start` -> `policy_decision` / `step` -> `checkpoint` -> `result` or `failure`), redacted at write time. To convince yourself the committed files are real, re-run the commands from the [demo path](#demo-path-live-run) and/or inspect what is already there:
+
+| File | Command that produces it | Expected exit | Proof to grep |
+|------|--------------------------|---------------|---------------|
+| [`evidence/discovery_run.log`](evidence/discovery_run.log) | `discover ... --log-out evidence/discovery_run.log` | `0` | `grep '"event": "summary"'` -> `"status": "goal_reached"`; every line carries its `policy_decision` |
+| [`evidence/artifact_example.json`](evidence/artifact_example.json) | `discover ... --artifact-out evidence/artifact_example.json` | `0` | `{{input.q}}` placeholder, `steps` `1..5`, mandatory `checkpoint` |
+| [`evidence/replay_run.log`](evidence/replay_run.log) | `replay --artifact ... --input q=M-1001 --log-out ...` | `0` | `grep '"event": "checkpoint", "passed": true'` and `"status": "success"` |
+| [`evidence/replay_exception.log`](evidence/replay_exception.log) | same, with `--input q=M-9999` | `1` | `"failure_category": "business_outcome"` + `page pattern: No records found` |
+| [`evidence/handoff_run.log`](evidence/handoff_run.log) | `replay --artifact evidence/handoff_artifact.json --input member_id=M-1001 --interactive --log-out ...` | `0` | `handoff` event with `"trigger": "risky_step"` and `"decision": "resume"`; then `checkpoint` + `success` |
+| [`evidence/handoff_artifact.json`](evidence/handoff_artifact.json) | hand-authored Phase 8 fixture | — | step 3 targets `*/execute`, which the policy marks `confirm` |
+
+Without live services, the same behaviors are asserted by the test suite (`uv run pytest`), using a fake driver and a fake LLM: see [Verify without live services](#verify-without-live-services).
+
+---
+
+## Exit codes at a glance
+
+Both subcommands use the same contract, so scripts can branch without parsing text:
+
+| Code | `discover` | `replay` |
+|------|-----------|----------|
+| `0` | `goal_reached` - artifact emitted | `success` - checkpoint passed, outputs validated |
+| `1` | unexpected infrastructure error (one redacted line) | typed failure (input, step, checkpoint, output) |
+| `2` | usage error, invalid config, `--artifact-out` outside the working tree | usage error, invalid artifact/config/taxonomy |
+| `10` | `blocked` - policy perimeter stopped the run | `blocked` - policy refused an action |
+| `11` | `needs_approval` | `needs_approval` / `abort` at an approval pause |
+| `12` | `max_steps` - step budget exhausted | - |
+| `13` | `timeout` - global time budget exhausted | - |
+| `14` | `dead_end` - repeated identical states, no progress | - |
+| `15` | `llm_error` - Ollama unreachable or invalid replies | - |
+| `130` | - | Ctrl+C (message on stderr, no stack trace) |
 
 ---
 
@@ -355,6 +415,46 @@ The engine is a library; discovery wires into it on every action (Phase 5) and r
 
 ---
 
+## Security
+
+The detailed mechanics live in [The safety policy](#the-safety-policy) and `REPORT.md` (Safety section). This section is the operational view: threat model, gates and audit trail.
+
+**Threat model.** A prompt-injected or hallucinating LLM (discovery) or a tampered artifact (replay) must not be able to (a) leave the configured perimeter, (b) trigger an irreversible financial action without explicit approval, or (c) leak regulated data into logs. Every defense is deterministic code + configuration — never LLM judgment:
+
+| Control | Where | Behavior |
+|---------|-------|----------|
+| Perimeter allowlist | `config/policy.json` `allowed_origins` / `allowed_routes` / `allowed_action_types` | Checked first, before any driver call; `//host` scheme-relative URLs rejected; `..` / `%2e%2e` normalized; a `block` is never overridable |
+| URL-scheme guard | `SeleniumDriver.navigate` | Non-`http(s)` (`file://`, `data:`, `chrome://`) raises `invalid_value` before reaching the browser |
+| Action classification | `config/policy.json` `rules` | `*/execute` -> `confirm` (needs `--approved` or a live operator), `extract` -> `flag` (audit mark) |
+| Write-time redaction | `redact_text` / `redact_mapping` / `RedactionFilter` | Secrets, account numbers, amounts and known names masked **before** bytes hit disk; CR/LF escaped (no log forging) |
+| Output containment | `safe_write_text` + CLI guard | `--artifact-out` outside the working tree is refused (`exit 2`) — no writes escape the repo |
+| Bounded handoff | `MAX_HANDOFF_TEXT` (2000) / `MAX_SNAPSHOT_ELEMENTS` (100) | A huge/hostile page cannot flood the operator prompt or the persisted evidence |
+
+**Repository hygiene.** `.env` is gitignored (only `.env.example` with placeholders is committed); evidence uses synthetic seed data only; no real credentials exist anywhere in the tree.
+
+**CI gates** (`.github/workflows/security.yml`, green on every push):
+
+| Gate | Command | Fails when |
+|------|---------|-----------|
+| SAST | `bandit -r src/ -ll` (+ `ruff --select=S`) | any medium+ Bandit finding |
+| Dependencies | `uvx pip-audit -r requirements.ci.txt --strict` over the pinned `uv.lock` export | any known CVE in locked dependencies |
+| Secrets | `detect-secrets` fresh scan vs the committed `.secrets.baseline` | any `(file, secret)` pair not in the baseline (job posts `::error file=...` annotations) |
+
+**Audit trail** (`docs/security/`, consolidated catalog in [`docs/security/README.md`](docs/security/README.md)):
+
+| Report | Scope |
+|--------|-------|
+| [`audit-2026-09-25-fase-4.md`](docs/security/audit-2026-09-25-fase-4.md) | Safety & policy core |
+| [`audit-2026-09-25-fase-5.md`](docs/security/audit-2026-09-25-fase-5.md) | Discovery loop (LLM input) |
+| [`audit-2026-09-28-fase-7.md`](docs/security/audit-2026-09-28-fase-7.md) | Error taxonomy / config loading |
+| [`audit-2026-09-29-fase-8.md`](docs/security/audit-2026-09-29-fase-8.md) | Human-in-the-loop handoff |
+| [`audit-2026-10-01-release.md`](docs/security/audit-2026-10-01-release.md) | Release gate |
+| [`audit-2026-10-05-fixes.md`](docs/security/audit-2026-10-05-fixes.md) | Remediation delta (SEC-503/505/805/901, DEF-803) |
+
+No Critical/High/Medium finding is open. Local equivalents: `uvx bandit -r src/ -ll -i`, `uvx pip-audit`, `uvx detect-secrets scan`.
+
+---
+
 ## The discovery loop (Phase 5)
 
 The `discover` subcommand runs the LLM-driven loop against the target UI and compiles what it learned into a Phase 3 artifact:
@@ -472,6 +572,23 @@ decision [resume|finish|abort]:
 - At most **one handoff per step**: if `resume` hits the same signal again, the run ends in `failure` (no pause loops). While paused the engine makes **zero** driver calls (asserted by test), so the human can operate the same session.
 - Every intervention lands in `ReplayResult.handoff` (`HandoffRecord`: request, decision, redacted note, resumed snapshot) — serializable evidence for Phase 9.
 - Without the flag, behavior is byte-for-byte Phases 6/7 (`operator=None`), exit codes unchanged.
+
+---
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `discover` exits `15` (`llm_error`) or hangs on step 1 | Ollama is not running or the model is missing | `ollama serve`, then `ollama list` must show `qwen2.5-coder:7b` (install it with `ollama pull qwen2.5-coder:7b`); check `OLLAMA_BASE_URL` |
+| `OSError: [Errno 98]` / browser won't bind, proxy app won't start | Port `5000` already in use | Stop the other process or start with `PROXY_APP_PORT=5001 uv run python -m proxy_app.app` (and point `--entry` at the new port) |
+| Selenium error about the driver/browser on first live run | Chrome not installed locally | Selenium Manager downloads **Chrome for Testing** automatically (one-time, needs network); cache lives in `~/.cache/selenium`. Tests and CI never need it |
+| `discover: --artifact-out must stay inside the working directory` (exit `2`) | Output containment guard (SEC-505) | Write inside the repo (e.g. `evidence/` or `output/`), or run the command from the directory you want to write in |
+| `uv: command not found` | `uv` not installed | Install it from https://docs.astral.sh/uv/ and re-run `uv sync` |
+| Tests fail after `git pull` | Dependencies moved | `uv sync` |
+| `discover` ends with exit `14` (`dead_end`) | The model repeated the same action/state; common with `qwen2.5-coder:7b` on vague goals | Make the goal concrete: entry URL, element names and the final page ("type M-1001 into input q, click Search, click View Detail") |
+| Windows PowerShell does not print the exit code | `$LASTEXITCODE` is only visible after the command | Run `uv run ...` then `echo $LASTEXITCODE` (PowerShell) or `echo %ERRORLEVEL%` (cmd) |
+| Balances/amounts changed between runs | The proxy app keeps state **in memory** | Restart `uv run python -m proxy_app.app` to reset seed data |
+| A run opened no visible window | Browsers run headless by default | Expected; pass a headed build only via library usage (`build_webdriver(headless=False)`) |
 
 ---
 
@@ -629,6 +746,9 @@ decision [resume|finish|abort]:
 | [`docs/security/audit-2026-09-25-fase-5.md`](docs/security/audit-2026-09-25-fase-5.md) | Phase 5 security audit (findings + remediation) |
 | [`docs/security/audit-2026-09-28-fase-7.md`](docs/security/audit-2026-09-28-fase-7.md) | Phase 7 security audit (findings + remediation) |
 | [`docs/security/audit-2026-09-29-fase-8.md`](docs/security/audit-2026-09-29-fase-8.md) | Phase 8 security audit (findings + remediation) |
+| [`docs/security/audit-2026-10-01-release.md`](docs/security/audit-2026-10-01-release.md) | Release-gate security audit |
+| [`docs/security/audit-2026-10-05-fixes.md`](docs/security/audit-2026-10-05-fixes.md) | Remediation delta: SEC-503/505/805/901, DEF-803 |
+| [`docs/security/README.md`](docs/security/README.md) | Consolidated security catalog: every finding, severity, status and the open backlog |
 | [`docs/GUIA_USUARIO.md`](docs/GUIA_USUARIO.md) | End-user guide for MemberServ + the `discover`, `replay` and `--interactive` commands (Spanish) |
 | [`CLAUDE.md`](CLAUDE.md) | Repository conventions and agent rules |
 
