@@ -5,7 +5,7 @@ from computer_use_automation_system.artifact.models import Locator
 
 
 def test_locator_valid_types() -> None:
-    for locator_type in ("id", "css", "xpath", "role", "text"):
+    for locator_type in ("id", "css", "xpath", "role", "text", "url"):
         locator = Locator(type=locator_type, value="something")
         assert locator.type == locator_type
 

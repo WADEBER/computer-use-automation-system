@@ -166,7 +166,7 @@ El proyecto incluye un asistente que realiza una tarea en la consola por ti: le 
 
 ## 🔁 Repetir una tarea con `replay`
 
-Cuando ya tienes un "plano" guardado (`artifact.json`, creado por `discover` o incluido en el proyecto), puedes **repetirlo exactamente igual** cuantas veces quieras — sin inteligencia artificial, sin sorpresas y mucho más rápido.
+Cuando ya tienes un "plano" guardado (`evidence/artifact_example.json`, incluido en el proyecto, o uno que tú guardes con `discover`), puedes **repetirlo exactamente igual** cuantas veces quieras — sin inteligencia artificial, sin sorpresas y mucho más rápido.
 
 ### Qué necesitas antes
 
@@ -180,7 +180,7 @@ Cuando ya tienes un "plano" guardado (`artifact.json`, creado por `discover` o i
 2. Ejecuta indicando el plano y los datos de entrada (uno o varios `clave=valor`):
 
    ```bash
-   uv run computer-use-automation-system replay --artifact evidence/discovery/artifact.json --input member_id=M-1001
+   uv run computer-use-automation-system replay --artifact evidence/artifact_example.json --input q=M-1001
    ```
 
 3. Al terminar imprime un resumen: la capacidad, la versión, los datos extraídos (`outputs`) y cuántos pasos ejecutó.
@@ -220,11 +220,11 @@ Cuando ya tienes un "plano" guardado (`artifact.json`, creado por `discover` o i
 
 ### Ejemplo
 
-> `uv run computer-use-automation-system replay --artifact evidence/discovery/artifact.json --input member_id=M-1001`
-> -> imprime `replay success: lookup_member_balance v1.0.0` y el saldo extraído.
+> `uv run computer-use-automation-system replay --artifact evidence/artifact_example.json --input q=M-1001`
+> -> imprime `replay success: <capacidad> v1.0.0` y resume los pasos ejecutados (más los datos extraídos `outputs`, si el plano los define).
 >
-> Si el miembro no existe, imprime algo como:
-> `replay failure: stage=step step=1 business_outcome step 1 (type) failed: element_not_found; classified business_outcome: page pattern: No records found`
+> Si el miembro no existe (`--input q=M-9999`), imprime algo como:
+> `replay failure: stage=step step=5 business_outcome step 5 (click) failed: element_not_found; classified business_outcome: page pattern: No records found`
 > -> no es un error del sistema: la aplicación respondió y su respuesta es "no hay registros".
 
 ---
@@ -238,7 +238,7 @@ Cuando la repetición se atasca, en vez de terminar con error puedes pedir que *
 1. Añade `--interactive` a cualquier comando `replay`:
 
    ```bash
-   uv run computer-use-automation-system replay --artifact evidence/discovery/artifact.json --input member_id=M-1001 --interactive
+   uv run computer-use-automation-system replay --artifact evidence/handoff_artifact.json --input member_id=M-1001 --interactive
    ```
 
 2. Si algo se atasca, la terminal muestra el aviso con el contexto y la pregunta:
@@ -273,7 +273,7 @@ Cuando la repetición se atasca, en vez de terminar con error puedes pedir que *
 ### Ejemplo
 
 > Una acción de desembolso necesita aprobación y no has pasado `--approved`:
-> -> la corrida pausa con `trigger=needs_approval`, escribes `resume` y el desembolso se ejecuta ese único paso.
+> -> la corrida pausa con `trigger=risky_step` (el paso se detecta antes de ejecutarse), escribes `resume` y el desembolso se ejecuta ese único paso.
 > -> si escribes `abort`, termina con código `11`, igual que sin `--interactive`.
 
 ---

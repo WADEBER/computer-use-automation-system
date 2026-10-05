@@ -190,9 +190,11 @@ output/*
 .tmp/*
 !.tmp/.gitkeep
 
-# Phase 9 take-home deliverables: the four exact evidence paths must be
-# committed (these negations must stay after `evidence/*` and `*.log`)
+# Phase 9 take-home deliverables: the evidence paths must be committed
+# (these negations must stay after `evidence/*` and `*.log`)
 !evidence/artifact_example.json
 !evidence/discovery_run.log
 !evidence/replay_run.log
 !evidence/replay_exception.log
+!evidence/handoff_artifact.json
+!evidence/handoff_run.log

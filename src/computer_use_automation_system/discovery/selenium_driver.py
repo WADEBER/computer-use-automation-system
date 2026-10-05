@@ -83,6 +83,10 @@ def locator_to_by(locator: Locator) -> tuple[str, str]:
         return By.XPATH, locator.value
     if locator.type is LocatorType.ROLE:
         return _role_to_by(locator.value)
+    if locator.type is LocatorType.URL:
+        # Schema validation keeps url locators on checkpoints only; never
+        # resolve them as element selectors.
+        raise ValueError("'url' locators are checkpoint expectations, not element selectors")
     # LocatorType.TEXT
     return By.XPATH, f"//*[normalize-space(.)={_xpath_literal(locator.value)}]"
 

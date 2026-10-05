@@ -30,7 +30,7 @@
     {
       "step_id": 1,
       "action_type": "navigate",
-      "description": "Initial page navigation to the MemberServ console",
+      "description": "Initial navigation to the MemberServ console",
       "locators": [
         {
           "type": "css",
@@ -44,7 +44,7 @@
     {
       "step_id": 2,
       "action_type": "type",
-      "description": "Input the member ID 'M-1001' into the search field.",
+      "description": "Enter member ID for search",
       "locators": [
         {
           "type": "id",
@@ -70,7 +70,33 @@
     {
       "step_id": 3,
       "action_type": "click",
-      "description": "Initiate search by clicking the Search button.",
+      "description": "To initiate the search process by clicking on the 'Search' button",
+      "locators": [
+        {
+          "type": "id",
+          "value": "q"
+        },
+        {
+          "type": "css",
+          "value": "input#q"
+        },
+        {
+          "type": "role",
+          "value": "textbox::M-1001"
+        },
+        {
+          "type": "xpath",
+          "value": "//input[@id=\"q\"]"
+        }
+      ],
+      "value": null,
+      "output_key": null,
+      "timeout_ms": 5000
+    },
+    {
+      "step_id": 4,
+      "action_type": "click",
+      "description": "To initiate the search process by clicking on the 'Search' button",
       "locators": [
         {
           "type": "css",
@@ -90,9 +116,9 @@
       "timeout_ms": 5000
     },
     {
-      "step_id": 4,
+      "step_id": 5,
       "action_type": "click",
-      "description": "Navigate to the member detail page for M-1001",
+      "description": "Click the 'View Detail' link to reach the member detail page for M-1001",
       "locators": [
         {
           "type": "role",
@@ -116,10 +142,10 @@
     "description": "Goal reached: The input field named New Loan Disbursement is visible on the member detail page for M-1001 in the MemberServ console at http://127.0.0.1:5000/. To get there: type M-1001 into input q, click element Search, then click link View Detail",
     "locators": [
       {
-        "type": "css",
-        "value": "body"
+        "type": "url",
+        "value": "http://127.0.0.1:5000/members"
       }
     ],
-    "expected_condition": "visible"
+    "expected_condition": "url_contains"
   }
 }

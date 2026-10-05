@@ -48,6 +48,11 @@ def test_text_locator_builds_xpath() -> None:
     assert "Search" in value
 
 
+def test_url_locator_is_never_resolved_as_an_element_selector() -> None:
+    with pytest.raises(ValueError, match="checkpoint expectations"):
+        locator_to_by(Locator(type=LocatorType.URL, value="http://127.0.0.1:5000/members"))
+
+
 def test_normalize_script_result_filters_junk() -> None:
     raw = [
         {"tag": "a", "text": "ok"},

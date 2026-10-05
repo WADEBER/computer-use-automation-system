@@ -58,3 +58,33 @@ def test_env_defaults_without_env_fall_back_to_spec_values(monkeypatch) -> None:
     assert client.model == "qwen2.5-coder:7b"
     assert client.base_url == "http://localhost:11434"
     assert os.environ.get("OLLAMA_MODEL") in (None, client.model)
+
+
+def test_live_transport_builds_one_client_with_an_explicit_timeout(monkeypatch) -> None:
+    """One reused `ollama.Client` per transport, never the library default
+    (`timeout=None` = wait forever)."""
+    import sys
+    import types
+
+    class FakeClient:
+        def __init__(self, host: str | None = None, timeout: float | None = None) -> None:
+            self.host = host
+            self.timeout = timeout
+            instances.append(self)
+
+        def chat(self, model: str, messages: list[dict[str, str]]) -> dict:
+            return {"message": {"content": f"echo:{messages[0]['content']}"}}
+
+    instances: list[FakeClient] = []
+
+    fake_ollama = types.ModuleType("ollama")
+    fake_ollama.Client = FakeClient  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "ollama", fake_ollama)
+
+    client = OllamaClient(model="m", base_url="http://ollama:11434", timeout_s=123.0)
+    assert client.complete("first") == "echo:first"
+    assert client.complete("second") == "echo:second"
+
+    assert len(instances) == 1
+    assert instances[0].host == "http://ollama:11434"
+    assert instances[0].timeout == 123.0

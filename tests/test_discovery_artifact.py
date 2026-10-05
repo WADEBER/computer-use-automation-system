@@ -1,5 +1,19 @@
-from computer_use_automation_system.artifact.models import Artifact, Locator, LocatorType
-from computer_use_automation_system.discovery.artifact_builder import StepSource, build_artifact
+import pytest
+from pydantic import ValidationError
+
+from computer_use_automation_system.artifact.models import (
+    Artifact,
+    Checkpoint,
+    ExpectedCondition,
+    Locator,
+    LocatorType,
+    Step,
+)
+from computer_use_automation_system.discovery.artifact_builder import (
+    StepSource,
+    area_prefix,
+    build_artifact,
+)
 from computer_use_automation_system.discovery.models import ActionType, ObservedElement, StepRecord
 
 
@@ -195,3 +209,82 @@ def test_dump_json_is_stable_across_builds() -> None:
     second = build_artifact("get total", "http://127.0.0.1:5000/", sources)
     assert first.model_dump_json() == second.model_dump_json()
     Artifact.model_validate_json(first.model_dump_json())
+
+
+def test_checkpoint_is_url_contains_on_input_agnostic_area_prefix() -> None:
+    artifact = build_artifact(
+        goal="open the member detail",
+        entry_url="http://127.0.0.1:5000/",
+        steps=[
+            StepSource(
+                record=_record(
+                    action=ActionType.NAVIGATE, value_preview="http://127.0.0.1:5000/members"
+                )
+            )
+        ],
+        final_url="http://127.0.0.1:5000/members/M-1001?tab=loans",
+    )
+    checkpoint = artifact.checkpoint
+    assert checkpoint.expected_condition == ExpectedCondition.URL_CONTAINS
+    assert checkpoint.locators == [
+        Locator(type=LocatorType.URL, value="http://127.0.0.1:5000/members")
+    ]
+    assert "M-1001" not in checkpoint.model_dump_json()
+    assert "tab=loans" not in checkpoint.model_dump_json()
+    assert "open the member detail" in checkpoint.description
+
+
+def test_checkpoint_falls_back_to_visible_without_a_usable_final_url() -> None:
+    for final_url in (None, "about:blank", ""):
+        artifact = build_artifact(
+            goal="open the app",
+            entry_url="http://127.0.0.1:5000/",
+            steps=[
+                StepSource(
+                    record=_record(
+                        action=ActionType.NAVIGATE, value_preview="http://127.0.0.1:5000/"
+                    )
+                )
+            ],
+            final_url=final_url,
+        )
+        assert artifact.checkpoint.expected_condition == ExpectedCondition.VISIBLE
+        assert artifact.checkpoint.locators == [Locator(type=LocatorType.CSS, value="body")]
+
+
+def test_area_prefix_strips_query_fragment_and_run_values() -> None:
+    assert area_prefix("http://127.0.0.1:5000/members/M-1001?tab=loans#top") == (
+        "http://127.0.0.1:5000/members"
+    )
+    assert area_prefix("http://127.0.0.1:5000/members/search?q=M-1001") == (
+        "http://127.0.0.1:5000/members"
+    )
+
+
+def test_area_prefix_handles_root_and_rejects_non_http() -> None:
+    assert area_prefix("http://127.0.0.1:5000/") == "http://127.0.0.1:5000"
+    assert area_prefix("https://host/app/depth/page") == "https://host/app"
+    assert area_prefix(None) is None
+    assert area_prefix("") is None
+    assert area_prefix("about:blank") is None
+    assert area_prefix("ftp://example/x") is None
+
+
+def test_url_locator_is_rejected_on_steps_and_non_url_conditions() -> None:
+    with pytest.raises(ValidationError) as step_error:
+        Step(
+            step_id=1,
+            action_type=ActionType.NAVIGATE,
+            description="go",
+            locators=[Locator(type=LocatorType.URL, value="http://127.0.0.1:5000/")],
+            value="http://127.0.0.1:5000/",
+        )
+    assert "checkpoint" in str(step_error.value)
+
+    with pytest.raises(ValidationError) as checkpoint_error:
+        Checkpoint(
+            description="visible",
+            locators=[Locator(type=LocatorType.URL, value="http://127.0.0.1:5000/")],
+            expected_condition=ExpectedCondition.VISIBLE,
+        )
+    assert "url_contains" in str(checkpoint_error.value)

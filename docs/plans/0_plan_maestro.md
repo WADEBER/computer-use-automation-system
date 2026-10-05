@@ -133,13 +133,13 @@ docs/plans/
 - [x] Stopping conditions: goal alcanzado, max steps, timeout, dead-end
 - [x] Contadores y detección de estados repetidos (anti-bucle infinito)
 - [x] Structured logs de cada step (qué, por qué, resultado)
-- [ ] **Corrida real** contra `proxy_app`: genera artefacto vía Fase 3
-- [ ] Evidencia inicial en `evidence/` (log + artefacto)
+- [x] **Corrida real** contra `proxy_app`: genera artefacto vía Fase 3
+- [x] Evidencia inicial en `evidence/` (log + artefacto)
 - [x] `/8-auditar` de la fase
 
 **Cierre:** al menos una corrida LLM real completa sobre superficie viva; artefacto emitido; log en `evidence/`.
 
-**Estado:** 2026-09-25 — 8/10 CA verificados (30/31 en `fase_5/5.spec.md`); 261 tests verdes; ruff/format/mypy/bandit OK; auditoría `docs/security/audit-2026-09-25-fase-5.md` (0 Critical/High; SEC-501/502 corregidos con tests de regresión, Low/Info en backlog); spec + plan en `fase_5/`. **Pendiente de cierre:** T13 (corrida real con Ollama + proxy_app y evidencia en `evidence/`) — gate manual con el operador.
+**Estado:** cerrada el 2026-10-04 — 10/10 CA verificados (31/31 en `fase_5/5.spec.md`, el CA manual T13 se verificó con la evidencia viva de Fase 9); auditoría `docs/security/audit-2026-09-25-fase-5.md` (0 Critical/High; SEC-501/502 corregidos con tests de regresión, Low/Info en backlog); spec + plan en `fase_5/`. T13 (corrida real con Ollama + proxy_app) cerrado con `evidence/artifact_example.json` + `evidence/discovery_run.log`.
 
 ---
 
@@ -153,7 +153,7 @@ docs/plans/
 
 **Cierre:** replay determinista del artefacto de Fase 5 (o fixture) pasa y verifica checkpoint.
 
-**Cerrada:** 2026-09-27 — 28/28 CA verificados en `fase_6/6.spec.md`; 324 tests verdes; ruff/format/mypy/bandit OK; spec + plan en `fase_6/`; CLI `replay` con exit codes 0/10/11/1/2; test estático anti-LLM sobre `replay/`. Desviación menor registrada (nota 12 del plan: `step.timeout_ms` no se propaga al `WebDriverWait` del driver; presupuesto global vía `--max-timeout-ms`). **Pendiente manual:** corrida E2E real (Chrome + proxy_app) compartida con T13 de la Fase 5.
+**Cerrada:** 2026-09-27 — 28/28 CA verificados en `fase_6/6.spec.md`; 324 tests verdes; ruff/format/mypy/bandit OK; spec + plan en `fase_6/`; CLI `replay` con exit codes 0/10/11/1/2; test estático anti-LLM sobre `replay/`. Desviación menor registrada (nota 12 del plan: `step.timeout_ms` no se propaga al `WebDriverWait` del driver; presupuesto global vía `--max-timeout-ms`). Corrida E2E real (Chrome + proxy_app) compartida con T13 de la Fase 5 y ejecutada en Fase 9 (`evidence/replay_run.log`).
 
 ---
 
@@ -169,7 +169,7 @@ docs/plans/
 
 **Cierre:** 3 tests de taxonomía en verde; business outcome nunca se clasifica como hard failure.
 
-**Cerrada:** 2026-09-28 — 23/23 CA verificados en `fase_7/7.spec.md`; 381 tests verdes; ruff/format/mypy/bandit OK; spec + plan en `fase_7/`; `failure_category` en el result contract (`business_outcome`/`recoverable`/`hard`) con clasificador determinista (`observe_raw` + `config/taxonomy.json`), reintentos/dismiss controlados sin `time.sleep()` y mensajes pasando por `redact_text`; CLI eager `load_taxonomy()` (exit 2 sin tocar la seam `_execute_replay`). Auditoría `docs/security/audit-2026-09-28-fase-7.md`: 0 Critical/High; SEC-001 y SEC-002 (Low) corregidos en el cierre (§7 del informe), SEC-003 (Info) en backlog; DEF-001..004 en defense-in-depth. **Pendiente manual:** corrida E2E real (Chrome + proxy_app) compartida con T13 de la Fase 5.
+**Cerrada:** 2026-09-28 — 23/23 CA verificados en `fase_7/7.spec.md`; 381 tests verdes; ruff/format/mypy/bandit OK; spec + plan en `fase_7/`; `failure_category` en el result contract (`business_outcome`/`recoverable`/`hard`) con clasificador determinista (`observe_raw` + `config/taxonomy.json`), reintentos/dismiss controlados sin `time.sleep()` y mensajes pasando por `redact_text`; CLI eager `load_taxonomy()` (exit 2 sin tocar la seam `_execute_replay`). Auditoría `docs/security/audit-2026-09-28-fase-7.md`: 0 Critical/High; SEC-001 y SEC-002 (Low) corregidos en el cierre (§7 del informe), SEC-003 (Info) en backlog; DEF-001..004 en defense-in-depth. Corrida E2E real (Chrome + proxy_app) compartida con T13 de la Fase 5 y ejecutada en Fase 9 (`evidence/replay_exception.log`, excepción clasificada `business_outcome`).
 
 ---
 

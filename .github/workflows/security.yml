@@ -10,9 +10,9 @@ name: security
 
 on:
   pull_request:
-    branches: [main, master]
+    branches: [main, master, Liebana]
   push:
-    branches: [main, master]
+    branches: [main, master, Liebana]
   workflow_dispatch:
 
 permissions:

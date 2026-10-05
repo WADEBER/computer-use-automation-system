@@ -224,10 +224,71 @@ def test_policy_comes_from_the_single_config_file(monkeypatch, tmp_path) -> None
     assert captured["policy"].redaction.patterns
 
 
-def test_default_command_still_prints_the_placeholder(capsys) -> None:
+def test_no_args_prints_help_instead_of_running(capsys) -> None:
     code = cli.main([])
     assert code == 0
-    assert "computer-use-automation-system" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "computer-use-automation-system" in out
+    assert "{discover,replay}" in out
+
+
+def test_help_flag_prints_help(capsys) -> None:
+    code = cli.main(["--help"])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "discover" in out
+    assert "replay" in out
+
+
+def test_unknown_command_exits_2() -> None:
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["frobnicate"])
+    assert exc.value.code == 2
+
+
+def test_policy_read_error_exits_2_without_traceback(monkeypatch, tmp_path, capsys) -> None:
+    def broken_policy():
+        raise OSError(2, "No such file or directory")
+
+    monkeypatch.setattr(cli, "load_policy", broken_policy)
+    code = cli.main(
+        [
+            "discover",
+            "--goal",
+            "g",
+            "--entry",
+            "http://127.0.0.1:5000/",
+            "--log-out",
+            str(tmp_path / "s.jsonl"),
+        ]
+    )
+    assert code == 2
+    captured = capsys.readouterr()
+    assert "discover: invalid policy config" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_runtime_error_exits_1_with_single_redacted_line(monkeypatch, tmp_path, capsys) -> None:
+    def exploding_execute(config, policy, logger):
+        raise RuntimeError("chrome went away\nsecond line of noise")
+
+    monkeypatch.setattr(cli, "_execute", exploding_execute)
+    code = cli.main(
+        [
+            "discover",
+            "--goal",
+            "g",
+            "--entry",
+            "http://127.0.0.1:5000/",
+            "--log-out",
+            str(tmp_path / "s.jsonl"),
+        ]
+    )
+    assert code == 1
+    captured = capsys.readouterr()
+    assert "discover: run failed: RuntimeError: chrome went away" in captured.err
+    assert "second line of noise" not in captured.err
+    assert "Traceback" not in captured.err
 
 
 def test_step_logger_used_by_cli_writes_to_log_path(monkeypatch, tmp_path) -> None:

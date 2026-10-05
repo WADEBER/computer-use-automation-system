@@ -5,6 +5,11 @@ not part of the reusable flow). Type/select values are parameterized as
 `{{input.*}}` so run values are never hardcoded; extracts get automatic
 `output{N}` keys. Fallback schemas keep the Fase 3 invariants (at least one
 property per schema) when a flow has no inputs or no extracts.
+
+The checkpoint is derived from the final URL observed when the goal fired:
+an input-agnostic ``url_contains`` on the app-area prefix (scheme + netloc +
+first path segment, query stripped), so a replay with different inputs still
+passes while a run that ended on the wrong page does not.
 """
 
 import re
@@ -26,6 +31,27 @@ from computer_use_automation_system.discovery.models import ActionType, Observed
 _ARTIFACT_VERSION = "1.0.0"
 _BODY_LOCATOR = Locator(type=LocatorType.CSS, value="body")
 _MAX_SLUG = 60
+
+
+def area_prefix(url: str | None) -> str | None:
+    """Return the input-agnostic prefix of ``url``: scheme + netloc + first
+    path segment, with query/fragment stripped.
+
+    ``http://127.0.0.1:5000/members/M-1001?tab=loans`` becomes
+    ``http://127.0.0.1:5000/members`` (no run value such as a member ID is
+    kept, so the checkpoint stays valid for any input). Non-http(s) or empty
+    input returns ``None`` (caller falls back to a visible checkpoint).
+    """
+    if not url:
+        return None
+    parts = urlparse(url)
+    if parts.scheme not in ("http", "https") or not parts.netloc:
+        return None
+    prefix = f"{parts.scheme}://{parts.netloc}"
+    segments = [segment for segment in parts.path.split("/") if segment]
+    if segments:
+        prefix = f"{prefix}/{segments[0]}"
+    return prefix
 
 
 @dataclass(frozen=True)
@@ -51,8 +77,19 @@ def _element_locators(element: ObservedElement | None) -> list[Locator]:
     return [_BODY_LOCATOR]
 
 
-def build_artifact(goal: str, entry_url: str, steps: list[StepSource]) -> Artifact:
-    """Compile a successful run into an artifact that passes Fase 3 checks."""
+def build_artifact(
+    goal: str,
+    entry_url: str,
+    steps: list[StepSource],
+    *,
+    final_url: str | None = None,
+) -> Artifact:
+    """Compile a successful run into an artifact that passes Fase 3 checks.
+
+    ``final_url`` is the driver URL observed when the goal check passed; it
+    feeds the checkpoint (``url_contains`` on the area prefix when it is an
+    http(s) URL, otherwise the generic visible checkpoint).
+    """
     sources = [source for source in steps if source.record.outcome == "ok"]
     if not sources:
         raise ValueError("cannot build an artifact without successful steps")
@@ -108,6 +145,20 @@ def build_artifact(goal: str, entry_url: str, steps: list[StepSource]) -> Artifa
         required=sorted(output_properties) if has_extract else [],
     )
 
+    prefix = area_prefix(final_url)
+    if prefix is not None:
+        checkpoint = Checkpoint(
+            description=f"Goal reached: {goal}",
+            locators=[Locator(type=LocatorType.URL, value=prefix)],
+            expected_condition=ExpectedCondition.URL_CONTAINS,
+        )
+    else:
+        checkpoint = Checkpoint(
+            description=f"Goal reached: {goal}",
+            locators=[_BODY_LOCATOR],
+            expected_condition=ExpectedCondition.VISIBLE,
+        )
+
     return Artifact(
         capability_id=slugify(goal, fallback="capability"),
         version=_ARTIFACT_VERSION,
@@ -116,9 +167,5 @@ def build_artifact(goal: str, entry_url: str, steps: list[StepSource]) -> Artifa
         input_schema=input_schema,
         output_schema=output_schema,
         steps=artifact_steps,
-        checkpoint=Checkpoint(
-            description=f"Goal reached: {goal}",
-            locators=[_BODY_LOCATOR],
-            expected_condition=ExpectedCondition.VISIBLE,
-        ),
+        checkpoint=checkpoint,
     )

@@ -50,7 +50,14 @@ def _make_record(
     snapshot_hash: str,
     elapsed_ms: int,
 ) -> StepRecord:
-    preview = action.value[:_VALUE_PREVIEW_MAX] if action.value is not None else None
+    # Navigate values are destinations that get compiled into the artifact:
+    # truncating them would bake a broken URL, so they are only redacted.
+    if action.value is None:
+        preview = None
+    elif action.action is ActionType.NAVIGATE:
+        preview = action.value
+    else:
+        preview = action.value[:_VALUE_PREVIEW_MAX]
     return StepRecord(
         step_index=step_index,
         action=action.action,
@@ -112,7 +119,12 @@ def run_discovery(
         if goal_outcome.verdict is not None and goal_outcome.verdict.goal_reached:
             successful = [source for source in sources if source.record.outcome == "ok"]
             if successful:
-                artifact = build_artifact(config.goal, config.entry_url, successful)
+                artifact = build_artifact(
+                    config.goal,
+                    config.entry_url,
+                    successful,
+                    final_url=driver.current_url(),
+                )
                 status = RunStatus.GOAL_REACHED
             else:
                 status = RunStatus.DEAD_END

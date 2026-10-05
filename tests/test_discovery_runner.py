@@ -3,14 +3,15 @@ import json
 from pathlib import Path
 from urllib.parse import urljoin
 
-from computer_use_automation_system.artifact.models import ActionType, Artifact
+from computer_use_automation_system.artifact.models import ActionType, Artifact, ExpectedCondition
 from computer_use_automation_system.discovery.logging_runner import StepLogger
 from computer_use_automation_system.discovery.models import (
     DiscoveryConfig,
     DiscoveryResult,
+    LLMAction,
     RunStatus,
 )
-from computer_use_automation_system.discovery.runner import run_discovery
+from computer_use_automation_system.discovery.runner import _make_record, run_discovery
 from computer_use_automation_system.safety.models import (
     DecisionKind,
     PolicyConfig,
@@ -134,6 +135,10 @@ def test_goal_reached_writes_valid_artifact_and_evidence(tmp_path) -> None:
     assert result.artifact is not None
     artifact = Artifact.model_validate_json(result.artifact.model_dump_json())
     assert [step.action_type for step in artifact.steps] == [ActionType.CLICK, ActionType.EXTRACT]
+    checkpoint = artifact.checkpoint
+    assert checkpoint.expected_condition == ExpectedCondition.URL_CONTAINS
+    assert checkpoint.locators[0].value == "http://127.0.0.1:5000/members"
+    assert "M-1001" not in checkpoint.model_dump_json()
     assert result.artifact_path is not None and Path(result.artifact_path).exists()
     raw = json.loads(Path(result.artifact_path).read_text(encoding="utf-8"))
     Artifact.model_validate(raw)
@@ -342,3 +347,64 @@ def test_result_invariants_hold_for_every_status(tmp_path) -> None:
     for result in cases:
         DiscoveryResult.model_validate(result.model_dump())
         assert (result.artifact is not None) == (result.status is RunStatus.GOAL_REACHED)
+
+
+def test_navigate_value_reaches_the_artifact_untruncated(tmp_path) -> None:
+    long_url = "http://127.0.0.1:5000/members/search?" + "&".join(f"k{i}={i}" for i in range(40))
+    assert len(long_url) > 80
+    driver = FakeDriver({ENTRY_URL: _ENTRY_RAW}, ENTRY_URL)
+    llm = ScriptedLLM(
+        actions=[
+            '{"action": "navigate", "element_ref": null, "value": "'
+            + long_url
+            + '", "reason": "open search results"}'
+        ],
+        goals=[
+            '{"goal_reached": false, "reason": "no"}',
+            '{"goal_reached": true, "reason": "yes"}',
+        ],
+    )
+    result = _run(_config(tmp_path), driver, llm, _policy())
+
+    assert result.status is RunStatus.GOAL_REACHED
+    assert result.steps[0].value_preview == long_url
+    assert result.artifact is not None
+    assert result.artifact.steps[0].value == long_url
+    assert result.artifact.checkpoint.locators[0].value == "http://127.0.0.1:5000/members"
+
+
+def test_non_navigate_values_stay_bounded_in_the_preview(tmp_path) -> None:
+    config = _config(tmp_path)
+    policy = _policy()
+    type_action = LLMAction(
+        action=ActionType.TYPE, element_ref=1, value="v" * 200, reason="fill the field"
+    )
+    type_record = _make_record(
+        config,
+        policy,
+        step_index=1,
+        action=type_action,
+        outcome="ok",
+        policy_record=None,
+        snapshot_hash="h",
+        elapsed_ms=1,
+    )
+    assert type_record.value_preview is not None
+    assert len(type_record.value_preview) == 80
+
+    nav_action = LLMAction(
+        action=ActionType.NAVIGATE,
+        value="http://127.0.0.1:5000/" + "x" * 120,
+        reason="go deep",
+    )
+    nav_record = _make_record(
+        config,
+        policy,
+        step_index=2,
+        action=nav_action,
+        outcome="ok",
+        policy_record=None,
+        snapshot_hash="h",
+        elapsed_ms=1,
+    )
+    assert nav_record.value_preview == nav_action.value

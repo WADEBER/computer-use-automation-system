@@ -52,7 +52,7 @@ The target application is a deliberately realistic legacy banking console (**Mem
 | 8 | Human-in-the-Loop Handoff | Completed |
 | 9 | Evidence, REPORT & Delivery | Completed |
 
-Current test suite: **455 tests passing** (pytest), with ruff (lint + format), mypy and bandit in green.
+Current test suite: **468 tests passing** (pytest), with ruff (lint + format), mypy and bandit in green.
 
 Roadmap and design decisions: [`docs/plans/0_plan_maestro.md`](docs/plans/0_plan_maestro.md).
 
@@ -86,6 +86,8 @@ Copy-Item .env.example .env # Windows PowerShell
 
 Then edit `.env` if needed. **Never commit `.env`** — only `.env.example` (it contains no secrets).
 
+Prerequisites beyond `uv` (Chrome, Ollama with `qwen2.5-coder:7b`) are listed under [Requirements](#requirements). The test suite needs none of them; a live discovery run does (Ollama), and any live run does (Chrome).
+
 | Variable | Default | Used by |
 |----------|---------|---------|
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Discovery loop (Phase 5) |
@@ -93,12 +95,11 @@ Then edit `.env` if needed. **Never commit `.env`** — only `.env.example` (it 
 | `PROXY_APP_HOST` | `127.0.0.1` | Proxy target app |
 | `PROXY_APP_PORT` | `5000` | Proxy target app |
 | `PROXY_APP_DEBUG` | `false` (`1`/`true`/`yes` enables) | Proxy target app (debug stays off by default) |
-| `BROWSER` / `HEADLESS` | `chrome` / `true` (commented in `.env.example`) | Browser automation (Phase 5+) |
 
 ### 3. Run the test suite
 
 ```bash
-uv run pytest        # 455 tests
+uv run pytest        # 468 tests
 ```
 
 ### 4. (Optional) Run the target application
@@ -148,7 +149,19 @@ uv run computer-use-automation-system replay \
   --artifact evidence/artifact_example.json \
   --input q=M-9999 \
   --log-out evidence/replay_exception.log
-# -> replay failure: stage=step step=4 business_outcome step 4 (click) failed: element_not_found; classified business_outcome: page pattern: No records found
+# -> replay failure: stage=step step=5 business_outcome step 5 (click) failed: element_not_found; classified business_outcome: page pattern: No records found
+```
+
+**5. Interactive replay with a human handoff** (pause on the `*/execute` step, operator types `resume`, run finishes; exit `0`):
+
+```bash
+uv run computer-use-automation-system replay \
+  --artifact evidence/handoff_artifact.json \
+  --input member_id=M-1001 \
+  --interactive \
+  --log-out evidence/handoff_run.log
+# -> handoff pause: trigger=risky_step ... decision [resume|finish|abort]: resume
+# -> result: success
 ```
 
 ### Evidence deliverables
@@ -159,8 +172,10 @@ uv run computer-use-automation-system replay \
 | [`evidence/discovery_run.log`](evidence/discovery_run.log) | JSONL step log of that run: one event per step (policy verdict, snapshot hash) + summary |
 | [`evidence/replay_run.log`](evidence/replay_run.log) | Structured timeline of a successful deterministic replay: `start` -> `policy_decision`/`step` events -> `checkpoint` -> `result: success` |
 | [`evidence/replay_exception.log`](evidence/replay_exception.log) | Managed failure reported structurally: `failure` event + `result: failure`, `failure_category: business_outcome` (page pattern `No records found`), exit `1` |
+| [`evidence/handoff_artifact.json`](evidence/handoff_artifact.json) | Hand-authored artifact exercising the Phase 8 pause: `risky_step` trigger on the `*/execute` step, checkpoint `url_contains` on the member area |
+| [`evidence/handoff_run.log`](evidence/handoff_run.log) | Full interactive replay timeline: `handoff` pause (`trigger=risky_step`), operator decision `resume`, checkpoint, `result: success`, exit `0` |
 
-All four files are written through the redaction layer at write time and contain only synthetic seed data. Design report: [`REPORT.md`](REPORT.md).
+All six files are written through the redaction layer at write time and contain only synthetic seed data. Design report: [`REPORT.md`](REPORT.md).
 
 ---
 
@@ -169,11 +184,11 @@ All four files are written through the redaction layer at write time and contain
 No browser, no Ollama and no network are needed to verify the system:
 
 ```bash
-uv run pytest                     # 455 tests; fake LLM + fake driver injected everywhere
+uv run pytest                     # 468 tests; fake LLM + fake driver injected everywhere
 uv run ruff check src/ tests/     # lint
 uv run ruff format --check src/ tests/
 uv run mypy src                   # type check
-uvx bandit -r src/ -ll            # security scan (same settings as CI)
+uvx bandit -r src/ -ll -i         # security scan (same settings as CI)
 ```
 
 - The discovery loop runs against `FakeLLMClient` and a scripted driver; the replay engine runs against `ReplayFakeDriver` (`tests/fakes.py`).
@@ -364,7 +379,7 @@ Prerequisites: the proxy app running (`uv run python -m proxy_app.app`), Ollama 
 
 **Exit codes** map the final run status: `0` goal_reached, `10` blocked (policy), `11` needs_approval, `12` max_steps, `13` timeout, `14` dead_end, `15` llm_error; argparse usage errors exit `2`.
 
-How a step runs: `observe` (clean DOM snapshot, deduped by hash) -> `decide` (structured prompt, strictly typed `LLMAction`, retries are feedback-corrected) -> `enforce` (Phase 4 policy) -> `act` (Selenium, locator fallback chain) -> repeat; `goal` is checked with a strict `{goal_reached, reason}` verdict. Loop guards: step budget, total-time budget, repeated-snapshot threshold (anti-bucle) and dead-end detection. Every step is appended to the JSONL log with the policy verdict, elapsed time and a redacted value preview.
+How a step runs: `observe` (clean DOM snapshot, deduped by hash) -> `decide` (structured prompt, strictly typed `LLMAction`, retries are feedback-corrected) -> `enforce` (Phase 4 policy) -> `act` (Selenium, locator fallback chain) -> repeat; `goal` is checked with a strict `{goal_reached, reason}` verdict. Loop guards: step budget, total-time budget, repeated-snapshot threshold (anti-loop) and dead-end detection. Every step is appended to the JSONL log with the policy verdict, elapsed time and a redacted value preview.
 
 Library usage (the CLI is a thin wrapper — tests inject a fake LLM/driver):
 
@@ -460,19 +475,21 @@ decision [resume|finish|abort]:
 
 ---
 
+## Development
+
 ### Commands
 
 | Command | What it does |
 |---------|--------------|
 | `uv sync` | Install/refresh dependencies from `uv.lock` |
-| `uv run pytest` | Run the full test suite (455 tests) |
+| `uv run pytest` | Run the full test suite (468 tests) |
 | `uv run ruff check src/ tests/` | Lint |
 | `uv run ruff format src/ tests/` | Format |
 | `uv run ruff format --check src/ tests/` | Verify formatting (CI) |
 | `uv run mypy src` | Type check (optional locally, not a CI gate) |
 | `uvx bandit -r src/ -ll -i` | Security scan (same settings as the CI workflow) |
 | `uv run python -m proxy_app.app` | Run the target app |
-| `uv run computer-use-automation-system discover --goal ... --entry ...` | Run a discovery (Phase 5); no args prints the placeholder |
+| `uv run computer-use-automation-system discover --goal ... --entry ...` | Run a discovery (Phase 5); no args or `--help` prints usage |
 | `uv run computer-use-automation-system replay --artifact ... --input ...` | Replay an artifact deterministically (Phase 6) |
 | `config/taxonomy.json` | Failure-classification patterns (Phase 7); edit to reclassify messages |
 
@@ -480,7 +497,7 @@ decision [resume|finish|abort]:
 
 | File | Tests | Covers |
 |------|-------|--------|
-| `tests/test_smoke.py` | 1 | CLI placeholder |
+| `tests/test_smoke.py` | 1 | CLI entry point: help, discover/replay dispatch, exit codes |
 | `tests/test_proxy_app_smoke.py` | 2 | App factory / landing page |
 | `tests/test_proxy_data.py` | 6 | Deterministic seed data |
 | `tests/test_proxy_flow.py` | 7 | Search -> detail -> disburse -> confirm -> receipt |
@@ -495,14 +512,14 @@ decision [resume|finish|abort]:
 | `tests/test_discovery_models.py` | 30 | Discovery config/status/record models, env defaults |
 | `tests/test_discovery_observe.py` | 11 | DOM snapshot, locators (incl. bare-tag fallback omission), digest dedup |
 | `tests/test_discovery_decide.py` | 12 | Prompt building, strict action parsing, retries |
-| `tests/test_discovery_llm_client.py` | 5 | Ollama client, fake transport, error mapping |
+| `tests/test_discovery_llm_client.py` | 6 | Ollama client, fake transport, error mapping, single reused client/timeout |
 | `tests/test_discovery_act.py` | 8 | click/type/navigate/extract semantics |
-| `tests/test_discovery_selenium_driver.py` | 14 | By mapping, XPath escaping, script translation, observe-script fields, `page_text`, static anti-sleep |
+| `tests/test_discovery_selenium_driver.py` | 15 | By mapping, XPath escaping, script translation, observe-script fields, `page_text`, static anti-sleep, URL locator rejection |
 | `tests/test_discovery_goal.py` | 11 | Goal verdict prompt/parse, retries |
-| `tests/test_discovery_artifact.py` | 10 | Step sources -> artifact, parametrization, slugs |
+| `tests/test_discovery_artifact.py` | 15 | Step sources -> artifact, parametrization, slugs, area-prefix checkpoint |
 | `tests/test_discovery_logging.py` | 7 | JSONL steps, persisted summary, redaction per line |
-| `tests/test_discovery_runner.py` | 11 | Full loop per status, determinism, policy invariant |
-| `tests/test_cli_discover.py` | 12 | Parser, dispatch, exit-code mapping, `--total-timeout-ms` |
+| `tests/test_discovery_runner.py` | 13 | Full loop per status, determinism, policy invariant, untruncated navigate URLs |
+| `tests/test_cli_discover.py` | 16 | Parser, help/usage, exit-code mapping, error paths, `--total-timeout-ms` |
 | `tests/test_replay_models.py` | 12 | Result contract, stage/policy invariants, round-trip |
 | `tests/test_replay_inputs.py` | 10 | input_schema validation, `{{input.*}}` resolution |
 | `tests/test_replay_checkpoint.py` | 7 | visible/text_present/url_contains, fallback, timeout |
@@ -511,7 +528,7 @@ decision [resume|finish|abort]:
 | `tests/test_replay_handoff.py` | 36 | Handoff contracts, 4 triggers, control state, operator decisions, handoff records, exports |
 | `tests/test_cli_replay.py` | 39 | replay flags (incl. `--interactive`, `--log-out`), exit codes 0/10/11/1/2/130, stderr diagnostics, category line, taxonomy/policy config errors, prompt operator |
 | `tests/test_replay_logging.py` | 7 | Replay timeline events (policy/steps/checkpoint/handoff/failure), `--log-out` writer, redaction |
-| **Total** | **455** | |
+| **Total** | **468** | |
 
 ### Quality gates
 
@@ -577,7 +594,7 @@ decision [resume|finish|abort]:
 │       ├── routes.py                      # Search/detail/disburse flows
 │       ├── data.py                        # Deterministic in-memory seed
 │       └── templates/                     # Legacy-style HTML (no test IDs)
-├── tests/                                 # Flat test suite (455 tests)
+├── tests/                                 # Flat test suite (468 tests)
 │   ├── fixtures/                          # Artifact fixtures
 │   │   ├── valid_artifact.json
 │   │   └── invalid/                       # bad_locator, bad_input_ref, ...
@@ -592,7 +609,7 @@ decision [resume|finish|abort]:
 │   ├── security/                          # Security audit reports
 │   ├── templates/                         # Document templates
 │   └── GUIA_USUARIO.md                    # End-user guide (Spanish)
-├── evidence/                              # Live-run deliverables (artifact + 3 JSONL logs)
+├── evidence/                              # Live-run deliverables (artifact + 4 JSONL/interactive logs + handoff artifact)
 └── REPORT.md                              # Design report (7 required sections, Phase 9)
 ```
 
@@ -603,7 +620,7 @@ decision [resume|finish|abort]:
 | Document | What it contains |
 |----------|------------------|
 | [`REPORT.md`](REPORT.md) | Design report: the 7 required sections (architecture, schema, determinism, heterogeneity, handoff, safety, cuts) |
-| [`evidence/`](evidence/) | Deliverables from the live runs: example artifact + discovery/replay JSONL logs (see [Demo path](#demo-path-live-run)) |
+| [`evidence/`](evidence/) | Deliverables from the live runs: example artifact, discovery/replay/handoff logs and the handoff artifact (see [Demo path](#demo-path-live-run)) |
 | [`docs/plans/0_plan_maestro.md`](docs/plans/0_plan_maestro.md) | Master roadmap, design decisions, phase status |
 | [`docs/plans/fase_1/1.spec.md`](docs/plans/fase_1/1.spec.md) → `fase_9/9.spec.md` | Functional spec + acceptance criteria per phase |
 | [`docs/plans/fase_1/1.0_project_scaffold.md`](docs/plans/fase_1/1.0_project_scaffold.md) → `fase_9/9.0_evidence_report_delivery.md` | Step-by-step implementation plans (test-first) |

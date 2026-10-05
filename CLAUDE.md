@@ -8,7 +8,7 @@ Reglas y contexto del proyecto para el agente. Leer siempre antes de hacer cambi
 
 Take-home técnico de **interface.ai**: un sistema de automatización computer-use que da "manos" a agentes IA sobre aplicaciones back-office bancarias legadas sin API. Convierte una corrida de descubrimiento con LLM en un artefacto tipado y reutilizable, lo reejecuta de forma determinista sin LLM, escala a un humano en la misma sesión viva cuando se bloquea y aplica guardrails de seguridad sobre datos financieros regulados.
 
-**Estado actual:** Fases 1-9 cerradas (Project Scaffold, Proxy Target App, Artifact Schema, Safety & Policy Core, Discovery Loop, Deterministic Replay Engine, Error Taxonomy, Human-in-the-Loop Handoff, Evidence/REPORT/Delivery). 455 tests verdes; ruff/format/mypy/bandit en verde; auditorías de seguridad en `docs/security/` (fases 4, 5, 7, 8 y release 2026-10-01 — 0 Critical/High). Patrones de clasificación de fallos en `config/taxonomy.json`. Evidencia en vivo en `evidence/` (artefacto de ejemplo + logs de discovery/replay, incluida una excepción clasificada `business_outcome`); con ella se cierra el T13 pendiente de Fase 5. Fixes 1-4 aplicados durante Fase 9 (ver §Correctivos de los planes de fase). Las 9 fases están definidas en `docs/plans/0_plan_maestro.md`.
+**Estado actual:** Fases 1-9 cerradas (Project Scaffold, Proxy Target App, Artifact Schema, Safety & Policy Core, Discovery Loop, Deterministic Replay Engine, Error Taxonomy, Human-in-the-Loop Handoff, Evidence/REPORT/Delivery). 468 tests verdes; ruff/format/mypy/bandit en verde; auditorías de seguridad en `docs/security/` (fases 4, 5, 7, 8 y release 2026-10-01 — 0 Critical/High). Patrones de clasificación de fallos en `config/taxonomy.json`. Evidencia en vivo en `evidence/` (artefacto de ejemplo + logs de discovery/replay, incluida una excepción clasificada `business_outcome`); con ella se cierra el T13 pendiente de Fase 5. Fixes 1-4 aplicados durante Fase 9 (ver §Correctivos de los planes de fase). Las 9 fases están definidas en `docs/plans/0_plan_maestro.md`.
 
 ---
 
@@ -20,7 +20,7 @@ uv run pytest                        # Ejecutar tests
 uv run ruff check src/ tests/        # Linting
 uv run ruff format src/ tests/       # Formato
 uv run mypy src                      # Type check (opcional)
-uv run computer-use-automation-system  # CLI placeholder
+uv run computer-use-automation-system  # CLI help (no args prints usage, exit 0)
 uv run python -m proxy_app.app       # Levantar proxy target app (Fase 2)
 ```
 

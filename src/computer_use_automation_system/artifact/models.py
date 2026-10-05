@@ -23,6 +23,7 @@ class LocatorType(StrEnum):
     XPATH = "xpath"
     ROLE = "role"
     TEXT = "text"
+    URL = "url"
 
 
 class ActionType(StrEnum):
@@ -45,7 +46,9 @@ class ExpectedCondition(StrEnum):
 
 class Locator(BaseModel):
     """A single element locator. The order of locators in a list is the
-    fallback priority: the replay engine tries them from first to last."""
+    fallback priority: the replay engine tries them from first to last.
+    Exception: a ``url`` locator is not an element selector — it carries the
+    expected URL string consumed by the ``url_contains`` checkpoint."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -110,6 +113,9 @@ class Step(BaseModel):
 
     @model_validator(mode="after")
     def _conditional_rules(self) -> "Step":
+        if any(loc.type is LocatorType.URL for loc in self.locators):
+            raise ValueError("'url' locators are checkpoint expectations, not step targets")
+
         has_input_ref = bool(INPUT_REF_PATTERN.search(self.value or ""))
 
         if self.action_type is ActionType.NAVIGATE:
@@ -139,13 +145,25 @@ class Step(BaseModel):
 
 
 class Checkpoint(BaseModel):
-    """Success condition verified before declaring the replay successful."""
+    """Success condition verified before declaring the replay successful.
+
+    For ``url_contains`` the expected URL is carried by a ``url`` locator
+    (the Phase 3 contract stores no expected-value field); any http(s)
+    locator value is accepted for backward compatibility.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     description: str = Field(min_length=1)
     locators: list[Locator] = Field(min_length=1)
     expected_condition: ExpectedCondition
+
+    @model_validator(mode="after")
+    def _locator_rules(self) -> "Checkpoint":
+        has_url_locator = any(loc.type is LocatorType.URL for loc in self.locators)
+        if has_url_locator and self.expected_condition is not ExpectedCondition.URL_CONTAINS:
+            raise ValueError("'url' locators require expected_condition='url_contains'")
+        return self
 
 
 class Artifact(BaseModel):

@@ -1,0 +1,97 @@
+{
+  "capability_id": "disburse_execution_approval_gate",
+  "version": "1.0.0",
+  "description": "Loan disbursement execution gate: navigates to the member detail page, reaches the irreversible /loans/disburse/execute endpoint (where the policy demands human approval - the run pauses with trigger risky_step), then returns to the member detail page. Success is gated by an area-prefix url_contains checkpoint.",
+  "target_app": {
+    "name": "127.0.0.1:5000",
+    "entry_url": "http://127.0.0.1:5000/"
+  },
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "member_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "member_id"
+    ]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "summary": {
+        "type": "string"
+      }
+    },
+    "required": []
+  },
+  "steps": [
+    {
+      "step_id": 1,
+      "action_type": "navigate",
+      "description": "Initial page navigation to the MemberServ console",
+      "locators": [
+        {
+          "type": "css",
+          "value": "body"
+        }
+      ],
+      "value": "http://127.0.0.1:5000/",
+      "output_key": null,
+      "timeout_ms": 5000
+    },
+    {
+      "step_id": 2,
+      "action_type": "navigate",
+      "description": "Open the member detail page for {{input.member_id}}",
+      "locators": [
+        {
+          "type": "css",
+          "value": "body"
+        }
+      ],
+      "value": "http://127.0.0.1:5000/members/{{input.member_id}}",
+      "output_key": null,
+      "timeout_ms": 5000
+    },
+    {
+      "step_id": 3,
+      "action_type": "navigate",
+      "description": "Reach the irreversible disbursement execution endpoint (policy rule */execute -> confirm: the interactive run pauses with trigger risky_step before this action runs)",
+      "locators": [
+        {
+          "type": "css",
+          "value": "body"
+        }
+      ],
+      "value": "http://127.0.0.1:5000/members/{{input.member_id}}/loans/disburse/execute",
+      "output_key": null,
+      "timeout_ms": 5000
+    },
+    {
+      "step_id": 4,
+      "action_type": "navigate",
+      "description": "Return to the member detail page so the area-prefix checkpoint can be verified",
+      "locators": [
+        {
+          "type": "css",
+          "value": "body"
+        }
+      ],
+      "value": "http://127.0.0.1:5000/members/{{input.member_id}}",
+      "output_key": null,
+      "timeout_ms": 5000
+    }
+  ],
+  "checkpoint": {
+    "description": "Browser is back inside the member area (/members) after the approval gate",
+    "locators": [
+      {
+        "type": "url",
+        "value": "http://127.0.0.1:5000/members"
+      }
+    ],
+    "expected_condition": "url_contains"
+  }
+}

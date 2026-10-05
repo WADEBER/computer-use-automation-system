@@ -2,10 +2,11 @@
 
 argparse (stdlib) only, no extra dependencies. Exit codes:
 - discover: 0 goal_reached, 10 blocked, 11 needs_approval, 12 max_steps,
-  13 timeout, 14 dead_end, 15 llm_error.
+  13 timeout, 14 dead_end, 15 llm_error, 1 unexpected runtime error
+  (browser/LLM infrastructure), 2 usage or config error.
 - replay: 0 success, 10 blocked, 11 needs_approval, 1 other failure,
   2 usage error / unreadable or invalid artifact.
-argparse usage errors always exit 2.
+argparse usage errors always exit 2. No args or --help prints the help.
 """
 
 import argparse
@@ -306,40 +307,76 @@ def _run_replay_command(namespace: argparse.Namespace) -> int:
     return _replay_exit_code(result)
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = sys.argv[1:] if argv is None else list(argv)
-    if not args or args[0] not in ("discover", "replay"):
-        print("Hello from computer-use-automation-system!")
-        return 0
+def _run_discover_command(namespace: argparse.Namespace) -> int:
+    """Build the config/policy, run the loop and map status to an exit code.
 
-    from dotenv import load_dotenv
+    Config problems exit 2 (like replay); unexpected infrastructure errors
+    (browser, Ollama connection) exit 1 with a single redacted line instead
+    of a raw traceback.
+    """
+    from pydantic import ValidationError
 
-    load_dotenv()
-    parser = build_parser()
-    namespace = parser.parse_args(args)
+    overrides: dict = {}
+    if namespace.artifact_out:
+        overrides["artifact_out"] = Path(namespace.artifact_out)
+    if namespace.log_out:
+        overrides["log_out"] = Path(namespace.log_out)
+    if namespace.total_timeout_ms:
+        overrides["total_timeout_ms"] = namespace.total_timeout_ms
     try:
-        if namespace.command == "replay":
-            return _run_replay_command(namespace)
-        if namespace.command != "discover":
-            parser.error("the following arguments are required: discover")
-
-        overrides: dict = {}
-        if namespace.artifact_out:
-            overrides["artifact_out"] = Path(namespace.artifact_out)
-        if namespace.log_out:
-            overrides["log_out"] = Path(namespace.log_out)
-        if namespace.total_timeout_ms:
-            overrides["total_timeout_ms"] = namespace.total_timeout_ms
         config = DiscoveryConfig(
             goal=namespace.goal,
             entry_url=namespace.entry,
             max_steps=namespace.max_steps,
             **overrides,
         )
+    except ValidationError as exc:
+        # Never echo config values back (CWE-209): only field names.
+        fields = ", ".join(".".join(str(part) for part in err["loc"]) for err in exc.errors())
+        print(f"discover: invalid configuration (fields: {fields})", file=sys.stderr)
+        return 2
+
+    try:
         policy = load_policy()
-        logger = StepLogger(config.log_out, policy.redaction)
+    except OSError as exc:
+        detail = exc.strerror or "read error"
+        print(f"discover: invalid policy config: {detail}", file=sys.stderr)
+        return 2
+    except ValidationError as exc:
+        # Never echo config values back (CWE-209): only field names.
+        fields = ", ".join(".".join(str(part) for part in err["loc"]) for err in exc.errors())
+        print(f"discover: invalid policy config (fields: {fields})", file=sys.stderr)
+        return 2
+
+    logger = StepLogger(config.log_out, policy.redaction)
+    try:
         result = _execute(config, policy, logger)
-        return EXIT_BY_STATUS[result.status]
+    except Exception as exc:  # noqa: BLE001 - boundary: one clean line, no traceback
+        first_line = str(exc).replace("\r", " ").split("\n", 1)[0]
+        detail = f"{type(exc).__name__}: {first_line}"[:500]
+        message = redact_text(detail, policy.redaction)
+        print(f"discover: run failed: {message}", file=sys.stderr)
+        return 1
+    return EXIT_BY_STATUS[result.status]
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = sys.argv[1:] if argv is None else list(argv)
+    parser = build_parser()
+    if not args or args[0] in ("--help", "-h"):
+        parser.print_help()
+        return 0
+
+    from dotenv import load_dotenv
+
+    load_dotenv()
+    namespace = parser.parse_args(args)
+    try:
+        if namespace.command == "replay":
+            return _run_replay_command(namespace)
+        if namespace.command != "discover":
+            parser.error("the following arguments are required: discover")
+        return _run_discover_command(namespace)
     except KeyboardInterrupt:
         print("interrupted", file=sys.stderr)
         return 130

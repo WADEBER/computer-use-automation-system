@@ -14,7 +14,7 @@
     },
     "Checkpoint": {
       "additionalProperties": false,
-      "description": "Success condition verified before declaring the replay successful.",
+      "description": "Success condition verified before declaring the replay successful.\n\nFor ``url_contains`` the expected URL is carried by a ``url`` locator\n(the Phase 3 contract stores no expected-value field); any http(s)\nlocator value is accepted for backward compatibility.",
       "properties": {
         "description": {
           "minLength": 1,
@@ -86,7 +86,7 @@
     },
     "Locator": {
       "additionalProperties": false,
-      "description": "A single element locator. The order of locators in a list is the\nfallback priority: the replay engine tries them from first to last.",
+      "description": "A single element locator. The order of locators in a list is the\nfallback priority: the replay engine tries them from first to last.\nException: a ``url`` locator is not an element selector \u2014 it carries the\nexpected URL string consumed by the ``url_contains`` checkpoint.",
       "properties": {
         "type": {
           "$ref": "#/$defs/LocatorType"
@@ -111,7 +111,8 @@
         "css",
         "xpath",
         "role",
-        "text"
+        "text",
+        "url"
       ],
       "title": "LocatorType",
       "type": "string"
